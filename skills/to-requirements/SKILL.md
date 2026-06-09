@@ -7,7 +7,7 @@ This skill takes the current conversation context and codebase understanding and
 
 Domain knowledge can be found in `CONTEXT.md` or if there are many domain documents in the codebase then `CONTEXT-MAP.md` will contain references to their locations. Use this documentation to ensure your wording is inline with the codebase architecture.
 
-ADRs can be found in a `adr/` directory, or if a `CONTEXT-MAP.md` exists then there may be an `adr/` directory alongside each `CONTEXT.md` file.
+ADRs can be found in a `docs/adr/` directory, or if a `CONTEXT-MAP.md` exists then there may be an `docs/adr/` directory alongside each `CONTEXT.md` file.
 
 ## Process
 
