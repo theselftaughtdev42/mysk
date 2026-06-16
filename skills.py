@@ -14,16 +14,26 @@ def default_skills_dir() -> Path:
     return Path.home() / ".claude" / "skills"
 
 
-def _is_deprecated(skill: Path) -> bool:
+def _read_frontmatter(skill: Path) -> dict[str, str]:
     lines = (skill / "SKILL.md").read_text().splitlines()
+    result: dict[str, str] = {}
     if not lines or lines[0].strip() != "---":
-        return False
+        return result
     for line in lines[1:]:
         if line.strip() == "---":
             break
-        if line.startswith("deprecated:") and "true" in line.lower():
-            return True
-    return False
+        if ":" in line:
+            key, _, value = line.partition(":")
+            result[key.strip()] = value.strip()
+    return result
+
+
+def _is_deprecated(skill: Path) -> bool:
+    return _read_frontmatter(skill).get("deprecated", "").lower() == "true"
+
+
+def _is_experimental(skill: Path) -> bool:
+    return _read_frontmatter(skill).get("experimental", "").lower() == "true"
 
 
 def available_skills() -> list[Path]:
@@ -36,7 +46,12 @@ def available_skills() -> list[Path]:
 
 def list_skills(_: argparse.Namespace) -> int:
     for path in available_skills():
-        suffix = "  [deprecated]" if _is_deprecated(path) else ""
+        if _is_deprecated(path):
+            suffix = "  [deprecated]"
+        elif _is_experimental(path):
+            suffix = "  [experimental]"
+        else:
+            suffix = ""
         print(f"{path.name}{suffix}")
     return 0
 
@@ -64,6 +79,28 @@ def deploy_skills(args: argparse.Namespace) -> int:
     return 0
 
 
+def _set_frontmatter_flag(skill: Path, flag: str) -> None:
+    skill_md = skill / "SKILL.md"
+    lines = skill_md.read_text().splitlines()
+    lines.insert(1, f"{flag}: true")
+    skill_md.write_text("\n".join(lines) + "\n")
+
+
+def experimental_skill(args: argparse.Namespace) -> int:
+    skill = SKILLS_DIR / args.name
+    if not skill.is_dir() or not (skill / "SKILL.md").exists():
+        print(f"Unknown skill: {args.name}", file=sys.stderr)
+        return 1
+
+    if _is_experimental(skill):
+        print(f"{args.name} is already marked as experimental.")
+        return 0
+
+    _set_frontmatter_flag(skill, "experimental")
+    print(f"Marked {args.name} as experimental.")
+    return 0
+
+
 def deprecate_skill(args: argparse.Namespace) -> int:
     skill = SKILLS_DIR / args.name
     if not skill.is_dir() or not (skill / "SKILL.md").exists():
@@ -74,12 +111,7 @@ def deprecate_skill(args: argparse.Namespace) -> int:
         print(f"{args.name} is already deprecated.")
         return 0
 
-    skill_md = skill / "SKILL.md"
-    lines = skill_md.read_text().splitlines()
-
-    # Insert after the opening ---
-    lines.insert(1, "deprecated: true")
-    skill_md.write_text("\n".join(lines) + "\n")
+    _set_frontmatter_flag(skill, "deprecated")
     print(f"Marked {args.name} as deprecated.")
     return 0
 
@@ -118,6 +150,10 @@ def main() -> int:
     deploy_parser = subparsers.add_parser("deploy")
     deploy_parser.add_argument("--dest", type=Path, default=default_skills_dir())
     deploy_parser.set_defaults(func=deploy_skills)
+
+    experimental_parser = subparsers.add_parser("experimental")
+    experimental_parser.add_argument("name")
+    experimental_parser.set_defaults(func=experimental_skill)
 
     deprecate_parser = subparsers.add_parser("deprecate")
     deprecate_parser.add_argument("name")
