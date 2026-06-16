@@ -1,5 +1,4 @@
 ---
-experimental: true
 name: caveman-review
 description: >
   Ultra-compressed code review comments. Cuts noise from PR feedback while preserving
