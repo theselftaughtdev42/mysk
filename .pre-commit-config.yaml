@@ -2,19 +2,38 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.17
     hooks:
-      - id: ruff-format
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/facebook/pyrefly-pre-commit
+    rev: 1.1.0.dev2
+    hooks:
+      - id: pyrefly-check
+        name: Pyrefly
+        pass_filenames: false
+        language: system
+        args: [src/mysk]
   - repo: local
     hooks:
-      - id: pyrefly
-        name: pyrefly
-        language: system
-        entry: uv run pyrefly check
-        args: [src/mysk]
-        pass_filenames: false
       - id: pytest
         name: pytest
         language: system
         entry: uv run pytest
         pass_filenames: false
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+    - id: check-added-large-files
+    - id: check-merge-conflict
+    - id: check-case-conflict
+    - id: check-yaml
+    - id: check-toml
+    - id: end-of-file-fixer
+    - id: trailing-whitespace
+    - id: detect-private-key
+    - id: mixed-line-ending
+    - id: name-tests-test
+      args: [--pytest-test-first]
+    - id: debug-statements
+    - id: no-commit-to-branch
+      args: [--branch, main]
