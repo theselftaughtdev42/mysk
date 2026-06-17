@@ -1,0 +1,20 @@
+[project]
+name = "mysk"
+version = "0.1.0"
+description = "CLI tool to manage and deploy agent skills"
+authors = [
+    { name = "Tim MacKay", email = "tim_mackay_git@fastmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "questionary>=2.1.1",
+    "rich>=15.0.0",
+    "typer>=0.26.7",
+]
+
+[project.scripts]
+mysk = "mysk.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.8.19,<0.9.0"]
+build-backend = "uv_build"
