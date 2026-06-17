@@ -16,3 +16,5 @@ jobs:
         run: uv run ruff format --check .
       - name: ruff lint
         run: uv run ruff check .
+      - name: pyrefly type check
+        run: uv run pyrefly check src/mysk

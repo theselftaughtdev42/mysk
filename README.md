@@ -9,12 +9,13 @@ Install pre-commit hooks after cloning:
 uv run pre-commit install
 ```
 
-On each commit, two hooks run automatically:
+On each commit, three hooks run automatically:
 
 1. **ruff-format** — reformats files in place
 2. **ruff** — applies safe lint fixes
+3. **pyrefly** — checks for type errors in `src/mysk`
 
-If either hook modifies a file, the commit aborts. Stage the changes and re-commit.
+If a hook modifies a file or finds an error, the commit aborts. Stage any formatting changes and re-commit.
 
 To run all hooks manually without committing:
 
