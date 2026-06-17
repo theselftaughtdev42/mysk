@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import dataclasses
 import difflib
 from collections.abc import Callable
 from pathlib import Path
 
+import pydantic
 import questionary
 import typer
 
@@ -15,8 +15,7 @@ from mysk.io.source_repo import find_source_repo
 Select = Callable[[list[Path]], list[Path]]
 
 
-@dataclasses.dataclass(frozen=True)
-class MigrationSummary:
+class MigrationSummary(pydantic.BaseModel):
     """Outcome of a migration run.
 
     ``upgraded`` are the skills that gained (or, under dry-run, would gain) a
@@ -25,10 +24,12 @@ class MigrationSummary:
     diff for each upgraded skill, so a dry-run can show exactly what would change.
     """
 
-    upgraded: list[Path] = dataclasses.field(default_factory=list)
-    already_compliant: list[Path] = dataclasses.field(default_factory=list)
-    skipped: list[Path] = dataclasses.field(default_factory=list)
-    diffs: dict[Path, str] = dataclasses.field(default_factory=dict)
+    model_config = pydantic.ConfigDict(frozen=True)
+
+    upgraded: list[Path] = pydantic.Field(default_factory=list)
+    already_compliant: list[Path] = pydantic.Field(default_factory=list)
+    skipped: list[Path] = pydantic.Field(default_factory=list)
+    diffs: dict[Path, str] = pydantic.Field(default_factory=dict)
 
 
 def migrate_skills(
@@ -48,18 +49,25 @@ def migrate_skills(
         (unmigrated if _is_unmigrated(path) else compliant).append(path)
 
     chosen = set(select(unmigrated))
-    summary = MigrationSummary(already_compliant=compliant)
+    upgraded: list[Path] = []
+    skipped: list[Path] = []
+    diffs: dict[Path, str] = {}
     for path in unmigrated:
         if path not in chosen:
-            summary.skipped.append(path)
+            skipped.append(path)
             continue
         before = path.read_text()
         after = _with_init_block(before)
-        summary.upgraded.append(path)
-        summary.diffs[path] = _diff(path, before, after)
+        upgraded.append(path)
+        diffs[path] = _diff(path, before, after)
         if not dry_run:
             path.write_text(after)
-    return summary
+    return MigrationSummary(
+        upgraded=upgraded,
+        already_compliant=compliant,
+        skipped=skipped,
+        diffs=diffs,
+    )
 
 
 def _with_init_block(text: str) -> str:
