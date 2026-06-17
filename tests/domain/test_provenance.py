@@ -17,6 +17,5 @@ def test_skill_with_source_is_imported():
 
 
 def test_provenance_rejects_non_bool_modified():
-
     with pytest.raises(pydantic.ValidationError):
         Provenance(source="https://x", modified="definitely")
