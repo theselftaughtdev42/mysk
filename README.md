@@ -1,6 +1,36 @@
 # my-skills
 Agent skills I have either made myself (less likely) or politely stolen (more likely).
 
+## Managing skills
+
+### Migrate
+
+Adopt existing skills into mysk management by adding a `mysk` block:
+
+```sh
+mysk dev migrate
+```
+
+Presents a checkbox of unmigrated skills. Use `--dry-run` to preview changes without writing files.
+
+### Mark
+
+Set the lifecycle state of one or more migrated skills:
+
+```sh
+mysk dev mark
+```
+
+Presents a checkbox of migrated skills, then a prompt for the new state: `Active`, `Experimental`, or `Deprecated`.
+
+Non-interactive:
+
+```sh
+mysk dev mark <skill-name> --status experimental
+```
+
+Both commands must be run from inside the source repo.
+
 ## Developer setup
 
 Install pre-commit hooks after cloning:

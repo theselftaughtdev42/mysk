@@ -3,7 +3,7 @@ name: setup-skills
 description: Sets up an `## Agent skills` block in AGENTS.md/CLAUDE.md and `docs/agents/` so the engineering skills know this repo's issue tracker (GitHub, Jira, Gitlab or local markdown), triage label vocabulary, and domain doc layout. Run before first use of any skill that mentions `CONTEXT.md` or `docs/adr/` — or if those skills appear to be missing context about the issue tracker, triage labels, or domain docs.
 disable-model-invocation: true
 mysk:
-  state: init
+  state: active
 ---
 
 # Setup Skills

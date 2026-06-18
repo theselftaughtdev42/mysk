@@ -2,7 +2,7 @@
 name: jira-tickets
 description: View and edit Jira tickets using the acli CLI. Use when user mentions a Jira ticket key (e.g. "WVE-376"), asks to view/update/edit/transition a ticket, wants to change a ticket's summary, description, status.
 mysk:
-  state: init
+  state: deprecated
 ---
 
 # Improve Jira Ticket

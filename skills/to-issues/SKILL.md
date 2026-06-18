@@ -2,7 +2,7 @@
 name: to-issues
 description: Break a plan, spec, or PRD into independently-grabbable issues on the project issue tracker using tracer-bullet vertical slices. Use when user wants to convert a plan into issues, requirements into issues, create implementation issues or break down work into issues.
 mysk:
-  state: init
+  state: active
 ---
 
 # To Issues
