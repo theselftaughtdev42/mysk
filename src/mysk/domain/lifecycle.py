@@ -8,7 +8,3 @@ class LifecycleState(enum.Enum):
     ACTIVE = "active"
     EXPERIMENTAL = "experimental"
     DEPRECATED = "deprecated"
-
-    @property
-    def is_deployable(self) -> bool:
-        return self in (LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL)
