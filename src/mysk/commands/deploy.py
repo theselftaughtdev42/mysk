@@ -10,7 +10,11 @@ from mysk.io.source_repo import find_source_repo
 from mysk.io.targets import discover_targets
 
 
-def deploy() -> None:
+def deploy(
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Replace non-symlink directories at collision paths."
+    ),
+) -> None:
     """Deploy skills to selected Deployment Targets."""
     repo = find_source_repo()
     if repo is None:
@@ -48,5 +52,5 @@ def deploy() -> None:
             skill = skill_result.skill
             source_dir = skill_result.path.parent
             target_path = target.path / skill.name
-            outcome = reconcile_skill(source_dir, target_path, overwrite=False)
+            outcome = reconcile_skill(source_dir, target_path, overwrite=overwrite)
             print(f"  {skill.name}: {outcome}")

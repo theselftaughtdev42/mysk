@@ -59,6 +59,7 @@ def _run(
     skills=(),
     questionary_stub=None,
     reconcile_fn=None,
+    extra_args=(),
 ):
     monkeypatch.setattr(deploy_cmd, "find_source_repo", lambda: repo)
     monkeypatch.setattr(deploy_cmd, "discover_targets", lambda: list(targets))
@@ -67,7 +68,7 @@ def _run(
         monkeypatch.setattr(deploy_cmd, "questionary", questionary_stub)
     if reconcile_fn is not None:
         monkeypatch.setattr(deploy_cmd, "reconcile_skill", reconcile_fn)
-    return runner.invoke(app, ["deploy"])
+    return runner.invoke(app, ["deploy", *extra_args])
 
 
 def test_all_skills_with_mysk_block_appear_in_skill_prompt_as_name_state(monkeypatch):
@@ -150,3 +151,46 @@ def test_nothing_selected_at_target_prompt_exits_cleanly(monkeypatch):
 
     assert result.exit_code == 0
     assert "Nothing selected." in result.output
+
+
+def test_overwrite_flag_passes_overwrite_true_to_reconcile(monkeypatch):
+    captured = {}
+
+    def reconcile(source_dir, target_path, overwrite):
+        captured["overwrite"] = overwrite
+        return "overwritten"
+
+    _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=_make_questionary(
+            target_answer=[_CLAUDE_TARGET],
+            skill_answer=[_ACTIVE_SKILL],
+        ),
+        reconcile_fn=reconcile,
+        extra_args=["--overwrite"],
+    )
+
+    assert captured.get("overwrite") is True
+
+
+def test_without_overwrite_flag_passes_overwrite_false_to_reconcile(monkeypatch):
+    captured = {}
+
+    def reconcile(source_dir, target_path, overwrite):
+        captured["overwrite"] = overwrite
+        return "skipped"
+
+    _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=_make_questionary(
+            target_answer=[_CLAUDE_TARGET],
+            skill_answer=[_ACTIVE_SKILL],
+        ),
+        reconcile_fn=reconcile,
+    )
+
+    assert captured.get("overwrite") is False
