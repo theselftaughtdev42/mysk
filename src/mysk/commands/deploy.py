@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import questionary
 import typer
@@ -8,6 +9,17 @@ from mysk.io.deploy import reconcile_skill
 from mysk.io.skills import load_skills
 from mysk.io.source_repo import find_source_repo
 from mysk.io.targets import discover_targets
+
+
+def _ensure_target_dir(path: Path) -> str | None:
+    if not path.is_dir():
+        path.mkdir(parents=True, exist_ok=True)
+        try:
+            display = "~/" + str(path.relative_to(Path.home()))
+        except ValueError:
+            display = str(path)
+        return display
+    return None
 
 
 def deploy(
@@ -48,6 +60,9 @@ def deploy(
 
     for target in selected_targets:
         print(f"\n{target.name}:")
+        created = _ensure_target_dir(target.path)
+        if created:
+            print(f"  Created {created}")
         for skill_result in selected_skills:
             skill = skill_result.skill
             source_dir = skill_result.path.parent

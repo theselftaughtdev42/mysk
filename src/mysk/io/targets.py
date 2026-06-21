@@ -39,6 +39,6 @@ def discover_targets(search_root: Path | None = None) -> list[Target]:
     result = []
     for name, rel in _KNOWN:
         p = root / rel
-        if p.is_dir():
+        if p.parent.is_dir():
             result.append(Target(name=name, path=p))
     return result

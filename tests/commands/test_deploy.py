@@ -61,10 +61,13 @@ def _run(
     questionary_stub=None,
     reconcile_fn=None,
     extra_args=(),
+    suppress_ensure_dir=True,
 ):
     monkeypatch.setattr(deploy_cmd, "find_source_repo", lambda: repo)
     monkeypatch.setattr(deploy_cmd, "discover_targets", lambda: list(targets))
     monkeypatch.setattr(deploy_cmd, "load_skills", lambda _: list(skills))
+    if suppress_ensure_dir:
+        monkeypatch.setattr(deploy_cmd, "_ensure_target_dir", lambda path: None)
     if questionary_stub is not None:
         monkeypatch.setattr(deploy_cmd, "questionary", questionary_stub)
     if reconcile_fn is not None:
@@ -221,3 +224,26 @@ def test_skip_reason_is_printed_alongside_outcome(monkeypatch):
     assert "foo: skipped" in result.output
     assert "directory already exists" in result.output
     assert "--overwrite" in result.output
+
+
+def test_missing_skills_dir_is_created_and_reported(monkeypatch, tmp_path):
+    agent_home = tmp_path / ".claude"
+    agent_home.mkdir()
+    skills_dir = agent_home / "skills"
+    target = Target(name="claude", path=skills_dir)
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=_make_questionary(
+            target_answer=[target],
+            skill_answer=[_ACTIVE_SKILL],
+        ),
+        reconcile_fn=lambda s, t, o: ReconcileResult(outcome="deployed"),
+        suppress_ensure_dir=False,
+    )
+
+    assert skills_dir.is_dir()
+    assert "Created" in result.output
+    assert ".claude/skills" in result.output

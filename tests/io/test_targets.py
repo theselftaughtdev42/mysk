@@ -15,15 +15,29 @@ def test_target_label_uses_absolute_path_when_not_under_home():
     assert t.label() == "/var/skills (claude)"
 
 
-def test_discover_targets_returns_only_existing_directories(tmp_path):
-    claude = tmp_path / ".claude" / "skills"
-    claude.mkdir(parents=True)
+def test_discover_targets_returns_agent_when_home_dir_exists(tmp_path):
+    (tmp_path / ".claude").mkdir()
 
     targets = discover_targets(search_root=tmp_path)
 
     assert len(targets) == 1
     assert targets[0].name == "claude"
-    assert targets[0].path == claude
+    assert targets[0].path == tmp_path / ".claude" / "skills"
+
+
+def test_discover_targets_returns_agent_when_home_and_skills_dir_both_exist(tmp_path):
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+
+    targets = discover_targets(search_root=tmp_path)
+
+    assert len(targets) == 1
+    assert targets[0].name == "claude"
+
+
+def test_discover_targets_excludes_agent_when_home_dir_missing(tmp_path):
+    targets = discover_targets(search_root=tmp_path)
+
+    assert targets == []
 
 
 def test_is_deployed_true_when_skill_dir_exists_with_mysk_block(tmp_path):
