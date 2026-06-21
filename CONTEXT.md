@@ -13,7 +13,7 @@ The CLI tool (short for my-skills) that manages the skill lifecycle: list, deplo
 _Avoid_: skills.py, the tool, the script
 
 **Deploy**:
-The act of symlinking each active skill from the local repository into every applicable Deployment Target. Covers both initial installation and refresh — there is no separate "update" operation.
+The act of symlinking skills from the local repository into selected Deployment Targets via an interactive prompt. The author chooses which targets and which skills; all skills are offered for selection regardless of lifecycle state, shown as `name (state)` so an informed choice can be made. Covers both initial installation and refresh — there is no separate "update" operation.
 _Avoid_: install, publish, sync
 
 **Deployment Target**:
@@ -21,7 +21,7 @@ An agent-specific directory on the local machine that receives symlinked skills 
 _Avoid_: destination, output directory
 
 **Init**:
-A lifecycle state indicating a skill is owned by `mysk` (it has a `mysk` block) but is not yet ready to deploy — typically a freshly scaffolded skill still being written. Init skills are skipped during deploy.
+A lifecycle state indicating a skill is owned by `mysk` (it has a `mysk` block) but is still being written. Typically a freshly scaffolded skill not yet considered ready for regular use.
 _Avoid_: new, scaffold, draft
 
 **Active**:
@@ -33,7 +33,7 @@ A lifecycle state indicating a skill is under active evaluation. It may be self-
 _Avoid_: draft, WIP, beta
 
 **Deprecated**:
-A lifecycle state indicating a skill is no longer in use. Deprecated skills are skipped during deploy and can be removed from all Deployment Targets via cleanup.
+A lifecycle state indicating a skill is no longer in use. Deprecated skills can be removed from all Deployment Targets via cleanup.
 _Avoid_: removed, disabled, archived
 
 **Provenance**:
@@ -64,4 +64,4 @@ _Avoid_: mysk metadata, mysk config
 >
 > **Dev**: And experimental vs active — what's the difference when deploying?
 >
-> **Owner**: Both get deployed. Experimental just means you're still evaluating it. Deprecated is the one that gets skipped.
+> **Owner**: Nothing mechanical — both show up in the deploy prompt. Experimental just means you're still evaluating it. The state is shown next to the name so you know what you're picking.
