@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 from mysk.cli import app
 from mysk.commands import deploy as deploy_cmd
 from mysk.domain import LifecycleState, MyskBlock, Skill
+from mysk.io.deploy import ReconcileResult
 from mysk.io.skills import SkillLoadResult
 from mysk.io.targets import Target
 
@@ -103,7 +104,10 @@ def test_all_skills_with_mysk_block_appear_in_skill_prompt_as_name_state(monkeyp
 
 
 def test_summary_printed_per_target_with_outcomes(monkeypatch):
-    outcomes = {"foo": "deployed", "bar": "skipped"}
+    outcomes = {
+        "foo": ReconcileResult(outcome="deployed"),
+        "bar": ReconcileResult(outcome="skipped"),
+    }
 
     def reconcile(source_dir, target_path, overwrite):
         return outcomes[target_path.name]
@@ -158,7 +162,7 @@ def test_overwrite_flag_passes_overwrite_true_to_reconcile(monkeypatch):
 
     def reconcile(source_dir, target_path, overwrite):
         captured["overwrite"] = overwrite
-        return "overwritten"
+        return ReconcileResult(outcome="overwritten")
 
     _run(
         monkeypatch,
@@ -180,7 +184,7 @@ def test_without_overwrite_flag_passes_overwrite_false_to_reconcile(monkeypatch)
 
     def reconcile(source_dir, target_path, overwrite):
         captured["overwrite"] = overwrite
-        return "skipped"
+        return ReconcileResult(outcome="skipped")
 
     _run(
         monkeypatch,
@@ -194,3 +198,26 @@ def test_without_overwrite_flag_passes_overwrite_false_to_reconcile(monkeypatch)
     )
 
     assert captured.get("overwrite") is False
+
+
+def test_skip_reason_is_printed_alongside_outcome(monkeypatch):
+    def reconcile(source_dir, target_path, overwrite):
+        return ReconcileResult(
+            outcome="skipped",
+            reason="directory already exists — use --overwrite to replace",
+        )
+
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=_make_questionary(
+            target_answer=[_CLAUDE_TARGET],
+            skill_answer=[_ACTIVE_SKILL],
+        ),
+        reconcile_fn=reconcile,
+    )
+
+    assert "foo: skipped" in result.output
+    assert "directory already exists" in result.output
+    assert "--overwrite" in result.output

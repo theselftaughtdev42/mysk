@@ -52,5 +52,8 @@ def deploy(
             skill = skill_result.skill
             source_dir = skill_result.path.parent
             target_path = target.path / skill.name
-            outcome = reconcile_skill(source_dir, target_path, overwrite=overwrite)
-            print(f"  {skill.name}: {outcome}")
+            result = reconcile_skill(source_dir, target_path, overwrite=overwrite)
+            line = f"  {skill.name}: {result.outcome}"
+            if result.reason:
+                line += f" ({result.reason})"
+            print(line)
