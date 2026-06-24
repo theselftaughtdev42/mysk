@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from mysk.domain.import_url import ImportUrl
+from mysk.domain.import_url import ImportUrl, RepoRootUrl
 
 
 class DownloadError(Exception):
@@ -32,6 +32,26 @@ def download_skill(url: ImportUrl, dest: Path) -> None:
 
         skill_dir = _find_skill_dir(tmp_path, url.skill_dir_name)
         shutil.copytree(skill_dir, dest)
+
+
+def scan_repo_for_skills(url: RepoRootUrl, ref: str = "HEAD") -> list[str]:
+    """Return paths of directories in *url*'s repo that contain a SKILL.md."""
+    response = httpx.get(url.trees_api_url(ref))
+    if response.is_error:
+        raise DownloadError(f"Failed to fetch repo tree: HTTP {response.status_code}")
+    payload = response.json()
+    if payload.get("truncated"):
+        raise DownloadError(
+            "Repository tree was truncated by GitHub (too many objects). "
+            "Import a specific skill URL instead of the repo root."
+        )
+    tree = payload.get("tree", [])
+    skill_md_paths = [
+        entry["path"]
+        for entry in tree
+        if entry["type"] == "blob" and entry["path"].endswith("/SKILL.md")
+    ]
+    return [p[: -len("/SKILL.md")] for p in skill_md_paths]
 
 
 def _find_skill_dir(extracted: Path, skill_dir_name: str) -> Path:

@@ -7,14 +7,14 @@ import questionary
 import typer
 from rich import print as rprint
 
-from mysk.domain.import_url import ImportUrl
+from mysk.domain.import_url import ImportUrl, RepoRootUrl
 from mysk.domain.lifecycle import LifecycleState
 from mysk.domain.mysk_block import MyskBlock
 from mysk.domain.naming import validate_skill_name
 from mysk.domain.provenance import Provenance
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
-from mysk.io.github import DownloadError, download_skill
+from mysk.io.github import DownloadError, download_skill, scan_repo_for_skills
 from mysk.io.skills import CollisionError, check_collision, skill_library
 
 _LIFECYCLE_CHOICES = [
@@ -34,10 +34,42 @@ def import_skill(
     """Import a skill from a GitHub URL into the Skill Library."""
     try:
         import_url = ImportUrl.parse(url)
+    except ValueError:
+        _import_from_repo_root(url)
+        return
+
+    _import_single(import_url, url, rename)
+
+
+def _import_from_repo_root(url: str) -> None:
+    try:
+        repo_root_url = RepoRootUrl.parse(url)
     except ValueError as exc:
         rprint(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1) from None
 
+    try:
+        skill_paths = scan_repo_for_skills(repo_root_url)
+    except DownloadError as exc:
+        rprint(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from None
+
+    if not skill_paths:
+        rprint("[red]Error:[/red] No skills found in this repository.")
+        raise typer.Exit(1)
+
+    selected_paths = questionary.checkbox(
+        "Choose skills to import:", choices=skill_paths
+    ).ask()
+    if not selected_paths:
+        raise typer.Exit(1)
+
+    for path in selected_paths:
+        skill_url = repo_root_url.skill_url(path)
+        _import_single(ImportUrl.parse(skill_url), skill_url, None)
+
+
+def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     upstream_dir_name = import_url.skill_dir_name
     local_name = rename if rename is not None else upstream_dir_name
 

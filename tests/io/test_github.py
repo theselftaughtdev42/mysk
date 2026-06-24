@@ -5,8 +5,8 @@ import httpx
 import pytest
 import respx
 
-from mysk.domain.import_url import ImportUrl
-from mysk.io.github import DownloadError, download_skill
+from mysk.domain.import_url import ImportUrl, RepoRootUrl
+from mysk.io.github import DownloadError, download_skill, scan_repo_for_skills
 
 _URL = ImportUrl.parse("https://github.com/alice/cool-skills/tree/main/skills/my-skill")
 
@@ -30,6 +30,39 @@ def _make_tarball(skill_dir_name: str, files: dict[str, str]) -> bytes:
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     return buf.getvalue()
+
+
+_ROOT_URL = RepoRootUrl.parse("https://github.com/alice/cool-skills")
+
+
+@respx.mock
+def test_scan_repo_for_skills_raises_on_truncated_response():
+    respx.get(_ROOT_URL.trees_api_url()).mock(
+        return_value=httpx.Response(200, json={"truncated": True, "tree": []})
+    )
+
+    with pytest.raises(DownloadError, match="truncated"):
+        scan_repo_for_skills(_ROOT_URL)
+
+
+@respx.mock
+def test_scan_repo_for_skills_returns_skill_dirs():
+    tree_payload = {
+        "tree": [
+            {"type": "tree", "path": "skills/foo"},
+            {"type": "blob", "path": "skills/foo/SKILL.md"},
+            {"type": "tree", "path": "skills/bar"},
+            {"type": "blob", "path": "skills/bar/SKILL.md"},
+            {"type": "blob", "path": "README.md"},
+        ]
+    }
+    respx.get(_ROOT_URL.trees_api_url()).mock(
+        return_value=httpx.Response(200, json=tree_payload)
+    )
+
+    paths = scan_repo_for_skills(_ROOT_URL)
+
+    assert paths == ["skills/foo", "skills/bar"]
 
 
 @respx.mock
