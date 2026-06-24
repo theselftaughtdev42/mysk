@@ -76,6 +76,14 @@ def _import_from_repo_root(url: str) -> None:
         _import_single(ImportUrl.parse(skill_url), skill_url, None)
 
 
+def _write_skill_to_library(src: Path, skill_md_content: str, dest: Path) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        staging = Path(tmp) / dest.name
+        shutil.copytree(src, staging)
+        (staging / "SKILL.md").write_text(skill_md_content)
+        shutil.copytree(staging, dest)
+
+
 def _import_from_local_path(path: Path) -> None:
     local_name = path.name
 
@@ -131,9 +139,8 @@ def _import_from_local_path(path: Path) -> None:
     )
 
     dest = library / local_name
-    shutil.copytree(path, dest)
-    (dest / "SKILL.md").write_text(
-        frontmatter.write(final_skill.to_frontmatter(), body)
+    _write_skill_to_library(
+        path, frontmatter.write(final_skill.to_frontmatter(), body), dest
     )
 
     print(f"Imported {local_name!r} ({state_value}).")
@@ -203,9 +210,9 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
             description=downloaded_skill.description,
             mysk=mysk_block,
         )
-        skill_md_path.write_text(frontmatter.write(final_skill.to_frontmatter(), body))
-
         dest = library / local_name
-        shutil.copytree(tmp_skill_dir, dest)
+        _write_skill_to_library(
+            tmp_skill_dir, frontmatter.write(final_skill.to_frontmatter(), body), dest
+        )
 
     print(f"Imported {local_name!r} ({state_value}).")
