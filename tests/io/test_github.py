@@ -21,12 +21,12 @@ def test_download_failure_raises_and_writes_no_files(tmp_path):
     assert not (tmp_path / "my-skill").exists()
 
 
-def _make_tarball(skill_dir_name: str, files: dict[str, str]) -> bytes:
+def _make_tarball(skill_path: str, files: dict[str, str]) -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for rel_path, content in files.items():
             data = content.encode()
-            info = tarfile.TarInfo(name=f"repo-abc123/{skill_dir_name}/{rel_path}")
+            info = tarfile.TarInfo(name=f"repo-abc123/{skill_path}/{rel_path}")
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     return buf.getvalue()
@@ -68,7 +68,7 @@ def test_scan_repo_for_skills_returns_skill_dirs():
 @respx.mock
 def test_download_extracts_skill_files(tmp_path):
     tarball = _make_tarball(
-        "my-skill",
+        "skills/my-skill",
         {"SKILL.md": "---\nname: my-skill\n---\n# body\n", "helper.py": "pass\n"},
     )
     respx.get(_URL.tarball_url()).mock(

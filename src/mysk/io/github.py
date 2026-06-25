@@ -30,7 +30,7 @@ def download_skill(url: ImportUrl, dest: Path) -> None:
         with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
             tar.extractall(tmp_path, filter="data")
 
-        skill_dir = _find_skill_dir(tmp_path, url.skill_dir_name)
+        skill_dir = _find_skill_dir(tmp_path, url.path)
         shutil.copytree(skill_dir, dest)
 
 
@@ -54,11 +54,12 @@ def scan_repo_for_skills(url: RepoRootUrl, ref: str = "HEAD") -> list[str]:
     return [p[: -len("/SKILL.md")] for p in skill_md_paths]
 
 
-def _find_skill_dir(extracted: Path, skill_dir_name: str) -> Path:
-    matches = list(extracted.rglob(skill_dir_name))
-    for match in matches:
-        if match.is_dir():
-            return match
+def _find_skill_dir(extracted: Path, skill_path: str) -> Path:
+    top_dirs = [d for d in extracted.iterdir() if d.is_dir()]
+    if len(top_dirs) == 1:
+        candidate = top_dirs[0] / skill_path
+        if candidate.is_dir():
+            return candidate
     raise DownloadError(
-        f"Could not find skill directory {skill_dir_name!r} in the downloaded archive."
+        f"Could not find skill directory {skill_path!r} in the downloaded archive."
     )

@@ -100,8 +100,4 @@ def check_collision(library: Path, name: str, source: str) -> None:
             f"Library. To update it run: mysk refresh {name}"
         )
 
-    raise CollisionError(
-        f"A skill named {name!r} already exists in the Skill Library "
-        f"(source: {existing_source!r}). Re-run with --rename <new-name> to import "
-        f"it under a different local name."
-    )
+    raise CollisionError(f"A skill named {name!r} already exists in the Skill Library")

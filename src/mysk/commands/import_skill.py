@@ -6,6 +6,8 @@ from typing import Annotated
 import questionary
 import typer
 from rich import print as rprint
+from rich.console import Console
+from rich.rule import Rule
 
 from mysk.domain.import_url import ImportUrl, RepoRootUrl
 from mysk.domain.lifecycle import LifecycleState
@@ -16,6 +18,8 @@ from mysk.domain.skill import Skill
 from mysk.io import frontmatter
 from mysk.io.github import DownloadError, download_skill, scan_repo_for_skills
 from mysk.io.skills import CollisionError, check_collision, skill_library
+
+_console = Console()
 
 _LIFECYCLE_CHOICES = [
     LifecycleState.INIT.value,
@@ -36,7 +40,7 @@ def import_skill(
     """Import a skill from a GitHub URL or local path into the Skill Library."""
     local_path = Path(url).expanduser()
     if local_path.exists() and local_path.is_dir():
-        _import_from_local_path(local_path)
+        _import_from_local_path(local_path, rename)
         return
 
     try:
@@ -71,9 +75,49 @@ def _import_from_repo_root(url: str) -> None:
     if not selected_paths:
         raise typer.Exit(1)
 
-    for path in selected_paths:
+    library = skill_library()
+    total = len(selected_paths)
+    imported = 0
+
+    for i, path in enumerate(selected_paths, 1):
         skill_url = repo_root_url.skill_url(path)
-        _import_single(ImportUrl.parse(skill_url), skill_url, None)
+        import_url = ImportUrl.parse(skill_url)
+        upstream_dir_name = import_url.skill_dir_name
+        rename = None
+
+        _console.print()
+        _console.print(
+            Rule(f"[bold]{upstream_dir_name}[/bold]  [dim]{i} of {total}[/dim]")
+        )
+
+        try:
+            check_collision(library, upstream_dir_name, skill_url)
+        except CollisionError as exc:
+            rprint(f"[red]Collision:[/red] {exc}")
+            new_name = questionary.text(
+                f"Enter a new local name for {upstream_dir_name!r}, "
+                "or leave blank to skip:"
+            ).ask()
+            if not new_name:
+                continue
+            try:
+                validate_skill_name(new_name)
+            except ValueError as ve:
+                rprint(f"[red]Error:[/red] {ve}")
+                continue
+            try:
+                check_collision(library, new_name, skill_url)
+            except CollisionError as ce:
+                rprint(f"[red]Error:[/red] {ce}")
+                continue
+            rename = new_name
+
+        _import_single(import_url, skill_url, rename)
+        imported += 1
+
+    _console.print()
+    _console.print(Rule(style="dim"))
+    rprint(f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills.")
 
 
 def _write_skill_to_library(src: Path, skill_md_content: str, dest: Path) -> None:
@@ -84,8 +128,8 @@ def _write_skill_to_library(src: Path, skill_md_content: str, dest: Path) -> Non
         shutil.copytree(staging, dest)
 
 
-def _import_from_local_path(path: Path) -> None:
-    local_name = path.name
+def _import_from_local_path(path: Path, rename: str | None = None) -> None:
+    local_name = rename if rename is not None else path.name
 
     try:
         validate_skill_name(local_name)
@@ -98,8 +142,23 @@ def _import_from_local_path(path: Path) -> None:
     try:
         check_collision(library, local_name, None)
     except CollisionError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from None
+        rprint(f"[red]Collision:[/red] {exc}")
+        new_name = questionary.text(
+            "Enter a new local name, or leave blank to cancel:"
+        ).ask()
+        if not new_name:
+            raise typer.Exit(1) from None
+        try:
+            validate_skill_name(new_name)
+        except ValueError as ve:
+            rprint(f"[red]Error:[/red] {ve}")
+            raise typer.Exit(1) from None
+        try:
+            check_collision(library, new_name, None)
+        except CollisionError as ce:
+            rprint(f"[red]Error:[/red] {ce}")
+            raise typer.Exit(1) from None
+        local_name = new_name
 
     skill_md_path = path / "SKILL.md"
     if not skill_md_path.exists():
@@ -113,10 +172,10 @@ def _import_from_local_path(path: Path) -> None:
         rprint(f"[red]Error:[/red] Malformed SKILL.md: {exc}")
         raise typer.Exit(1) from None
 
-    if local_skill.name != local_name:
+    if rename is None and local_skill.name != path.name:
         rprint(
             f"[red]Error:[/red] The skill's name field {local_skill.name!r} "
-            f"does not match the directory name {local_name!r}. "
+            f"does not match the directory name {path.name!r}. "
             f"Skills must satisfy the Agent Skills naming constraint."
         )
         raise typer.Exit(1)
@@ -161,8 +220,24 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     try:
         check_collision(library, local_name, url)
     except CollisionError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from None
+        rprint(f"[red]Collision:[/red] {exc}")
+        new_name = questionary.text(
+            "Enter a new local name, or leave blank to cancel:"
+        ).ask()
+        if not new_name:
+            raise typer.Exit(1) from None
+        try:
+            validate_skill_name(new_name)
+        except ValueError as ve:
+            rprint(f"[red]Error:[/red] {ve}")
+            raise typer.Exit(1) from None
+        try:
+            check_collision(library, new_name, url)
+        except CollisionError as ce:
+            rprint(f"[red]Error:[/red] {ce}")
+            raise typer.Exit(1) from None
+        local_name = new_name
+        rename = new_name
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / local_name
