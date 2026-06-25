@@ -137,25 +137,25 @@ def test_collision_same_name_same_source_suggests_refresh(tmp_path):
         check_collision(tmp_path, "my-skill", _SOURCE_A)
 
 
-def test_collision_same_name_different_source_suggests_rename(tmp_path):
+def test_collision_same_name_different_source_reports_conflict(tmp_path):
     fm = (
         f"name: my-skill\ndescription: d\nmysk:\n"
         f"  state: active\n  source: {_SOURCE_B}\n  modified: false\n"
     )
     _skill(tmp_path, "my-skill", fm)
 
-    with pytest.raises(CollisionError, match="--rename"):
+    with pytest.raises(CollisionError, match="already exists"):
         check_collision(tmp_path, "my-skill", _SOURCE_A)
 
 
-def test_collision_self_authored_same_name_suggests_rename(tmp_path):
+def test_collision_self_authored_same_name_reports_conflict(tmp_path):
     _skill(
         tmp_path,
         "my-skill",
         "name: my-skill\ndescription: d\nmysk:\n  state: active\n",
     )
 
-    with pytest.raises(CollisionError, match="--rename"):
+    with pytest.raises(CollisionError, match="already exists"):
         check_collision(tmp_path, "my-skill", _SOURCE_A)
 
 

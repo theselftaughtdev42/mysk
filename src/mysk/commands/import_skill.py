@@ -82,7 +82,7 @@ def _import_from_repo_root(url: str) -> None:
         try:
             check_collision(library, upstream_dir_name, skill_url)
         except CollisionError as exc:
-            rprint(f"[yellow]Collision:[/yellow] {exc}")
+            rprint(f"[red]Collision:[/red] {exc}")
             new_name = questionary.text(
                 f"Enter a new local name for {upstream_dir_name!r}, "
                 "or leave blank to skip:"
@@ -126,8 +126,23 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
     try:
         check_collision(library, local_name, None)
     except CollisionError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from None
+        rprint(f"[red]Collision:[/red] {exc}")
+        new_name = questionary.text(
+            "Enter a new local name, or leave blank to cancel:"
+        ).ask()
+        if not new_name:
+            raise typer.Exit(1) from None
+        try:
+            validate_skill_name(new_name)
+        except ValueError as ve:
+            rprint(f"[red]Error:[/red] {ve}")
+            raise typer.Exit(1) from None
+        try:
+            check_collision(library, new_name, None)
+        except CollisionError as ce:
+            rprint(f"[red]Error:[/red] {ce}")
+            raise typer.Exit(1) from None
+        local_name = new_name
 
     skill_md_path = path / "SKILL.md"
     if not skill_md_path.exists():
@@ -189,8 +204,24 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     try:
         check_collision(library, local_name, url)
     except CollisionError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from None
+        rprint(f"[red]Collision:[/red] {exc}")
+        new_name = questionary.text(
+            "Enter a new local name, or leave blank to cancel:"
+        ).ask()
+        if not new_name:
+            raise typer.Exit(1) from None
+        try:
+            validate_skill_name(new_name)
+        except ValueError as ve:
+            rprint(f"[red]Error:[/red] {ve}")
+            raise typer.Exit(1) from None
+        try:
+            check_collision(library, new_name, url)
+        except CollisionError as ce:
+            rprint(f"[red]Error:[/red] {ce}")
+            raise typer.Exit(1) from None
+        local_name = new_name
+        rename = new_name
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / local_name
