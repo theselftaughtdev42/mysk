@@ -40,7 +40,10 @@ def import_skill(
     """Import a skill from a GitHub URL or local path into the Skill Library."""
     local_path = Path(url).expanduser()
     if local_path.exists() and local_path.is_dir():
-        _import_from_local_path(local_path, rename)
+        if (local_path / "SKILL.md").exists():
+            _import_from_local_path(local_path, rename)
+        else:
+            _import_from_local_dir(local_path)
         return
 
     try:
@@ -50,6 +53,98 @@ def import_skill(
         return
 
     _import_single(import_url, url, rename)
+
+
+def _import_from_local_dir(path: Path) -> None:
+    skill_dirs = sorted(
+        d for d in path.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
+    )
+
+    if not skill_dirs:
+        rprint("[red]Error:[/red] No skills found in this directory.")
+        raise typer.Exit(1)
+
+    selected_names = questionary.checkbox(
+        "Choose skills to import:", choices=[d.name for d in skill_dirs]
+    ).ask()
+    if not selected_names:
+        raise typer.Exit(1)
+
+    skill_dir_map = {d.name: d for d in skill_dirs}
+    library = skill_library()
+    total = len(selected_names)
+    imported = 0
+
+    for i, name in enumerate(selected_names, 1):
+        skill_dir = skill_dir_map[name]
+        rename = None
+
+        _console.print()
+        _console.print(Rule(f"[bold]{name}[/bold]  [dim]{i} of {total}[/dim]"))
+
+        try:
+            check_collision(library, name, None)
+        except CollisionError as exc:
+            rprint(f"[red]Collision:[/red] {exc}")
+            new_name = questionary.text(
+                f"Enter a new local name for {name!r}, or leave blank to skip:"
+            ).ask()
+            if not new_name:
+                continue
+            try:
+                validate_skill_name(new_name)
+            except ValueError as ve:
+                rprint(f"[red]Error:[/red] {ve}")
+                continue
+            try:
+                check_collision(library, new_name, None)
+            except CollisionError as ce:
+                rprint(f"[red]Error:[/red] {ce}")
+                continue
+            rename = new_name
+
+        local_name = rename if rename is not None else name
+
+        data, body = frontmatter.read((skill_dir / "SKILL.md").read_text())
+        try:
+            local_skill = Skill.from_frontmatter(data)
+        except (ValueError, KeyError) as exc:
+            rprint(f"[red]Error:[/red] Malformed SKILL.md: {exc}")
+            continue
+
+        if rename is None and local_skill.name != name:
+            rprint(
+                f"[red]Error:[/red] The skill's name field {local_skill.name!r} "
+                f"does not match the directory name {name!r}. "
+                f"Fix the SKILL.md and re-import."
+            )
+            continue
+
+        state_value = questionary.select(
+            "Choose a lifecycle state:", choices=_LIFECYCLE_CHOICES
+        ).ask()
+        if state_value is None:
+            raise typer.Exit(1)
+
+        mysk_block = MyskBlock(
+            state=LifecycleState(state_value),
+            provenance=Provenance(),
+        )
+        final_skill = Skill(
+            name=local_name,
+            description=local_skill.description,
+            mysk=mysk_block,
+        )
+        dest = library / local_name
+        _write_skill_to_library(
+            skill_dir, frontmatter.write(final_skill.to_frontmatter(), body), dest
+        )
+        imported += 1
+        print(f"Imported {local_name!r} ({state_value}).")
+
+    _console.print()
+    _console.print(Rule(style="dim"))
+    rprint(f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills.")
 
 
 def _import_from_repo_root(url: str) -> None:
