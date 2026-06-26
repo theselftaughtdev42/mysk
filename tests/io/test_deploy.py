@@ -1,4 +1,4 @@
-from mysk.io.deploy import reconcile_skill
+from mysk.io.deploy import reconcile_skill, remove_skill
 
 
 def test_fresh_destination_creates_symlink_and_returns_deployed(tmp_path):
@@ -147,3 +147,57 @@ def test_foreign_symlink_with_overwrite_is_replaced_and_returns_overwritten(tmp_
     assert result.outcome == "overwritten"
     assert target.is_symlink()
     assert target.resolve() == source
+
+
+def test_remove_skill_not_deployed_returns_skipped(tmp_path):
+    skill_library = tmp_path / "library"
+    skill_library.mkdir()
+    target = tmp_path / "targets" / "my-skill"
+    target.parent.mkdir(parents=True)
+
+    result = remove_skill(target, skill_library_path=skill_library)
+
+    assert result.outcome == "skipped"
+
+
+def test_remove_skill_mysk_owned_symlink_returns_removed(tmp_path):
+    skill_library = tmp_path / "library"
+    skill_library.mkdir()
+    skill_dir = skill_library / "my-skill"
+    skill_dir.mkdir()
+    target = tmp_path / "targets" / "my-skill"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(skill_dir)
+
+    result = remove_skill(target, skill_library_path=skill_library)
+
+    assert result.outcome == "removed"
+    assert not target.exists()
+
+
+def test_remove_skill_foreign_symlink_returns_skipped(tmp_path):
+    skill_library = tmp_path / "library"
+    skill_library.mkdir()
+    foreign_dir = tmp_path / "foreign"
+    foreign_dir.mkdir()
+    target = tmp_path / "targets" / "my-skill"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(foreign_dir)
+
+    result = remove_skill(target, skill_library_path=skill_library)
+
+    assert result.outcome == "skipped"
+    assert target.resolve() == foreign_dir
+
+
+def test_remove_skill_regular_directory_returns_skipped(tmp_path):
+    skill_library = tmp_path / "library"
+    skill_library.mkdir()
+    target = tmp_path / "targets" / "my-skill"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text("---\nname: my-skill\n---")
+
+    result = remove_skill(target, skill_library_path=skill_library)
+
+    assert result.outcome == "skipped"
+    assert target.is_dir()

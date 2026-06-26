@@ -4,7 +4,7 @@ install:
 	uv sync --all-groups
 
 test:
-	uv run pytest --cov=src/mysk --cov-report=term-missing
+	uv run pytest
 
 lint:
 	uv run ruff check .

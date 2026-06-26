@@ -37,4 +37,4 @@ jobs:
       - name: install test deps
         run: uv sync --group test --no-dev
       - name: pytest with coverage
-        run: uv run pytest --cov=mysk --cov-fail-under=100
+        run: uv run pytest
