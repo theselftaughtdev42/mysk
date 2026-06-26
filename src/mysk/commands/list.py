@@ -1,3 +1,4 @@
+import typer
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
@@ -6,9 +7,14 @@ from mysk.domain.lifecycle import LifecycleState
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets, is_deployed
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
+
 _HIGHLIGHTED = {LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL}
 
 
+@app.callback()
 def list_skills() -> None:
     """List all skills and where they are deployed."""
     skills = load_skills(skill_library())

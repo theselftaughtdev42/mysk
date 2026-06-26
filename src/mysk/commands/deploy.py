@@ -10,6 +10,10 @@ from mysk.io.deploy import reconcile_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
+
 
 def _ensure_target_dir(path: Path) -> str | None:
     if not path.is_dir():
@@ -22,6 +26,7 @@ def _ensure_target_dir(path: Path) -> str | None:
     return None
 
 
+@app.callback()
 def deploy(
     overwrite: bool = typer.Option(
         False, "--overwrite", help="Replace non-symlink directories at collision paths."

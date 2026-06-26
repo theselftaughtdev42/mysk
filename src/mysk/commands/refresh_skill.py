@@ -12,7 +12,12 @@ from mysk.io import frontmatter
 from mysk.io.github import DownloadError, download_skill
 from mysk.io.skills import load_skills, skill_library
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
 
+
+@app.callback()
 def refresh_skill(
     name: Annotated[
         str | None, typer.Argument(help="Name of the skill to refresh.")

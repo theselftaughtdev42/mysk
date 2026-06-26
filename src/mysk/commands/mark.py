@@ -11,6 +11,10 @@ from mysk.domain import LifecycleState
 from mysk.io import frontmatter
 from mysk.io.skills import load_skills, skill_library
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
+
 _SELECTABLE_STATES = [
     LifecycleState.ACTIVE,
     LifecycleState.EXPERIMENTAL,
@@ -88,6 +92,7 @@ def _apply_marking(skill_path: Path, value: LifecycleState | bool) -> str | None
         return f"[yellow]{name} is self-authored — skipping.[/yellow]"
 
 
+@app.callback()
 def mark_skill(
     skill_name: Annotated[
         str | None,

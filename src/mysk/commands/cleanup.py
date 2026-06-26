@@ -8,11 +8,16 @@ from mysk.io.deploy import remove_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
+
 
 def confirm(msg: str) -> bool:
     return typer.confirm(msg)
 
 
+@app.callback()
 def cleanup() -> None:
     """Remove deprecated skills from all Deployment Targets."""
     library = skill_library()

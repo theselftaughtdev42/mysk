@@ -9,7 +9,12 @@ from mysk.io.deploy import remove_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets, is_deployed
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
 
+
+@app.callback()
 def undeploy(
     agents: str | None = typer.Option(
         None,

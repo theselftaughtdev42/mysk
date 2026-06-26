@@ -11,6 +11,10 @@ from mysk.io import frontmatter
 from mysk.io.skills import skill_library
 from mysk.io.targets import discover_targets
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
+
 
 def _is_modified(skill_dir: Path) -> bool:
     skill_md = skill_dir / "SKILL.md"
@@ -24,6 +28,7 @@ def _is_modified(skill_dir: Path) -> bool:
         return False
 
 
+@app.callback()
 def delete_skill(
     name: str = typer.Argument(..., help="Name of the skill to delete."),
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),

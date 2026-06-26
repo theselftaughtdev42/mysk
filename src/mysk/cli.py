@@ -19,12 +19,13 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
-app.command("list")(list.list_skills)
-app.command("mark")(mark.mark_skill)
-app.command("delete")(delete_skill.delete_skill)
-app.command("deploy")(deploy.deploy)
-app.command("import")(import_skill.import_skill)
-app.command("refresh")(refresh_skill.refresh_skill)
-app.command("cleanup")(cleanup.cleanup)
-app.command("undeploy")(undeploy.undeploy)
-app.command("library")(library.library_cmd)
+app.add_typer(import_skill.app, name="import")
+app.add_typer(deploy.app, name="deploy")
+
+app.add_typer(cleanup.app, name="cleanup")
+app.add_typer(delete_skill.app, name="delete")
+app.add_typer(library.app, name="library")
+app.add_typer(list.app, name="list")
+app.add_typer(mark.app, name="mark")
+app.add_typer(refresh_skill.app, name="refresh")
+app.add_typer(undeploy.app, name="undeploy")

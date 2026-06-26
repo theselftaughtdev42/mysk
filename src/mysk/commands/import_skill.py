@@ -19,6 +19,10 @@ from mysk.io import frontmatter
 from mysk.io.github import DownloadError, download_skill, scan_repo_for_skills
 from mysk.io.skills import CollisionError, check_collision, skill_library
 
+app = typer.Typer(
+    invoke_without_command=True, context_settings={"allow_interspersed_args": True}
+)
+
 _console = Console()
 
 _LIFECYCLE_CHOICES = [
@@ -27,6 +31,7 @@ _LIFECYCLE_CHOICES = [
 ]
 
 
+@app.callback()
 def import_skill(
     url: Annotated[
         str, typer.Argument(help="GitHub URL or local path of the skill directory.")
