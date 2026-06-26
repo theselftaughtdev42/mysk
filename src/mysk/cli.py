@@ -6,10 +6,10 @@ from mysk.commands import (
     deploy,
     import_skill,
     library,
+    list,
+    mark,
     refresh_skill,
 )
-from mysk.commands import list as list_cmd
-from mysk.commands.dev import app as dev_app
 
 app = typer.Typer(
     name="mysk",
@@ -18,9 +18,8 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
-app.add_typer(dev_app, name="dev")
-
-app.command("list")(list_cmd.list_skills)
+app.command("list")(list.list_skills)
+app.command("mark")(mark.mark_skill)
 app.command("delete")(delete_skill.delete_skill)
 app.command("deploy")(deploy.deploy)
 app.command("import")(import_skill.import_skill)

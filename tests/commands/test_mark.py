@@ -3,7 +3,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from mysk.cli import app
-from mysk.commands.dev import mark
+from mysk.commands import mark
 from mysk.domain import LifecycleState
 
 runner = CliRunner()
@@ -23,7 +23,7 @@ def _run(monkeypatch, repo: Path, extra_args=(), prompt_skills=None, prompt_stat
         monkeypatch.setattr(mark, "_prompt_for_skills", prompt_skills)
     if prompt_state is not None:
         monkeypatch.setattr(mark, "_prompt_for_state", prompt_state)
-    return runner.invoke(app, ["dev", "mark", *extra_args])
+    return runner.invoke(app, ["mark", *extra_args])
 
 
 def test_set_lifecycle_updates_existing_mysk_block(tmp_path):

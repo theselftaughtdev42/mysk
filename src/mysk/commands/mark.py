@@ -49,7 +49,7 @@ def _prompt_for_state() -> LifecycleState:
     ).ask()
 
 
-def dev_mark(
+def mark_skill(
     skill_name: Annotated[
         str | None,
         typer.Argument(help="Name of the skill to mark."),
@@ -64,7 +64,6 @@ def dev_mark(
     results = load_skills(skills_root)
 
     if skill_name is not None and status is not None:
-        # find the first result matching the condition
         match = next((r for r in results if r.path.parent.name == skill_name), None)
         if match is None:
             rprint(

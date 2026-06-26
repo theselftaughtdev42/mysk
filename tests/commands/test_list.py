@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 from mysk.cli import app
 from mysk.commands import list as list_cmd
 from mysk.domain import LifecycleState, MyskBlock, Skill
+from mysk.domain.provenance import Provenance
 from mysk.io.skills import SkillLoadResult
 from mysk.io.targets import Target
 
@@ -16,7 +17,6 @@ _ACTIVE_SKILL = SkillLoadResult(
         name="foo", description="d", mysk=MyskBlock(state=LifecycleState.ACTIVE)
     ),
     schema_error=None,
-    is_unmigrated=False,
 )
 _DEPRECATED_SKILL = SkillLoadResult(
     path=Path("/fake/skills/old/SKILL.md"),
@@ -24,19 +24,40 @@ _DEPRECATED_SKILL = SkillLoadResult(
         name="old", description="d", mysk=MyskBlock(state=LifecycleState.DEPRECATED)
     ),
     schema_error=None,
-    is_unmigrated=False,
 )
-_UNMIGRATED_SKILL = SkillLoadResult(
-    path=Path("/fake/skills/legacy/SKILL.md"),
-    skill=Skill(name="legacy", description="d"),
+_IMPORTED_SKILL = SkillLoadResult(
+    path=Path("/fake/skills/ext/SKILL.md"),
+    skill=Skill(
+        name="ext",
+        description="d",
+        mysk=MyskBlock(
+            state=LifecycleState.ACTIVE,
+            provenance=Provenance(source="https://example.com", modified=False),
+        ),
+    ),
     schema_error=None,
-    is_unmigrated=True,
+)
+_MODIFIED_SKILL = SkillLoadResult(
+    path=Path("/fake/skills/mod/SKILL.md"),
+    skill=Skill(
+        name="mod",
+        description="d",
+        mysk=MyskBlock(
+            state=LifecycleState.ACTIVE,
+            provenance=Provenance(source="https://example.com", modified=True),
+        ),
+    ),
+    schema_error=None,
+)
+_NO_MYSK_BLOCK_SKILL = SkillLoadResult(
+    path=Path("/fake/skills/legacy/SKILL.md"),
+    skill=None,
+    schema_error="missing mysk block",
 )
 _BAD_SKILL = SkillLoadResult(
     path=Path("/fake/skills/bad/SKILL.md"),
     skill=None,
     schema_error="mysk block missing state",
-    is_unmigrated=False,
 )
 _CLAUDE_TARGET = Target(name="claude", path=Path("/home/user/.claude/skills"))
 
@@ -48,6 +69,12 @@ def _run(monkeypatch, targets=(), skills=(), deployed_fn=None):
     if deployed_fn is not None:
         monkeypatch.setattr(list_cmd, "is_deployed", deployed_fn)
     return runner.invoke(app, ["list"])
+
+
+def test_provenance_column_appears_in_list_output(monkeypatch):
+    result = _run(monkeypatch, skills=[_ACTIVE_SKILL])
+    assert result.exit_code == 0
+    assert "Provenance" in result.output
 
 
 def test_deployed_skill_appears_in_table_with_target_label(monkeypatch):
@@ -111,26 +138,51 @@ def test_non_deployable_skill_shows_em_dash_when_not_deployed(monkeypatch):
     assert "—" in result.output
 
 
-def test_unmigrated_skill_shows_em_dash_in_status_and_deployed_to_columns(monkeypatch):
+def test_no_mysk_block_skill_shows_inline_status(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
-        skills=[_UNMIGRATED_SKILL],
-        deployed_fn=lambda t, s: True,
+        skills=[_NO_MYSK_BLOCK_SKILL],
     )
 
     assert result.exit_code == 0
-    assert "—" in result.output
+    assert "no mysk block" in result.output
 
 
-def test_schema_error_skill_shows_em_dash_in_status_and_deployed_to_columns(
-    monkeypatch,
-):
+def test_malformed_skill_shows_malformed_inline_status(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_BAD_SKILL],
     )
+
+    assert result.exit_code == 0
+    assert "malformed" in result.output
+
+
+def test_self_authored_skill_shows_self_authored_provenance(monkeypatch):
+    result = _run(monkeypatch, skills=[_ACTIVE_SKILL])
+
+    assert result.exit_code == 0
+    assert "self-authored" in result.output
+
+
+def test_imported_skill_shows_imported_provenance(monkeypatch):
+    result = _run(monkeypatch, skills=[_IMPORTED_SKILL])
+
+    assert result.exit_code == 0
+    assert "imported" in result.output
+
+
+def test_modified_imported_skill_shows_modified_flag_in_provenance(monkeypatch):
+    result = _run(monkeypatch, skills=[_MODIFIED_SKILL])
+
+    assert result.exit_code == 0
+    assert "imported ⚠ modified" in result.output
+
+
+def test_malformed_skill_shows_em_dash_for_provenance(monkeypatch):
+    result = _run(monkeypatch, skills=[_BAD_SKILL])
 
     assert result.exit_code == 0
     assert "—" in result.output
