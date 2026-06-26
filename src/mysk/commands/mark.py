@@ -17,6 +17,19 @@ _SELECTABLE_STATES = [
     LifecycleState.DEPRECATED,
 ]
 
+_VALID_KEYS = ["status", "modified"]
+
+
+def set_skill_modified(skill_path: Path, value: bool) -> None:
+    text = skill_path.read_text()
+    data, body = frontmatter.read(text)
+    if not data.get("mysk", {}).get("source"):
+        raise ValueError(
+            "skill is self-authored; modified only applies to imported skills"
+        )
+    data["mysk"]["modified"] = value
+    skill_path.write_text(frontmatter.write(data, body))
+
 
 def set_skill_lifecycle(skill_path: Path, state: LifecycleState) -> None:
     text = skill_path.read_text()
@@ -39,14 +52,40 @@ def _prompt_for_skills(skills: list[Path]) -> list[Path]:
     return chosen or []
 
 
-def _prompt_for_state() -> LifecycleState:
+def _prompt_for_key() -> str:
     return questionary.select(
-        "Select lifecycle state:",
+        "Select marking:",
+        choices=[questionary.Choice(title=k, value=k) for k in _VALID_KEYS],
+    ).ask()
+
+
+def _prompt_for_value(key: str) -> LifecycleState | bool:
+    if key == "status":
+        return questionary.select(
+            "Select value:",
+            choices=[
+                questionary.Choice(title=s.value, value=s) for s in _SELECTABLE_STATES
+            ],
+        ).ask()
+    return questionary.select(
+        "Select value:",
         choices=[
-            questionary.Choice(title=s.value.capitalize(), value=s)
-            for s in _SELECTABLE_STATES
+            questionary.Choice(title="true", value=True),
+            questionary.Choice(title="false", value=False),
         ],
     ).ask()
+
+
+def _apply_marking(skill_path: Path, value: LifecycleState | bool) -> str | None:
+    if isinstance(value, LifecycleState):
+        set_skill_lifecycle(skill_path, value)
+        return None
+    try:
+        set_skill_modified(skill_path, value)
+        return None
+    except ValueError:
+        name = escape(skill_path.parent.name)
+        return f"[yellow]{name} is self-authored — skipping.[/yellow]"
 
 
 def mark_skill(
@@ -54,16 +93,20 @@ def mark_skill(
         str | None,
         typer.Argument(help="Name of the skill to mark."),
     ] = None,
-    status: Annotated[
+    key: Annotated[
         str | None,
-        typer.Option("--status", help="Lifecycle state to set."),
+        typer.Option("--key", help="Marking to set (status, modified)."),
+    ] = None,
+    value: Annotated[
+        str | None,
+        typer.Option("--value", help="Value for the marking."),
     ] = None,
 ) -> None:
-    """Interactively set the lifecycle state of a skill."""
+    """Interactively set a marking on one or more skills."""
     skills_root = skill_library()
     results = load_skills(skills_root)
 
-    if skill_name is not None and status is not None:
+    if skill_name is not None and key is not None and value is not None:
         match = next((r for r in results if r.path.parent.name == skill_name), None)
         if match is None:
             rprint(
@@ -79,13 +122,34 @@ def mark_skill(
                 file=sys.stderr,
             )
             raise typer.Exit(1)
-        try:
-            state = LifecycleState(status.lower())
-        except ValueError as e:
-            rprint(f"[red]Unknown status: {escape(status)}[/red]", file=sys.stderr)
-            raise typer.Exit(1) from e
-        set_skill_lifecycle(match.path, state)
-        rprint(f"[green]Marked {escape(skill_name)} as {state.value}.[/green]")
+        if key not in _VALID_KEYS:
+            rprint(f"[red]Unknown key: {escape(key)}[/red]", file=sys.stderr)
+            raise typer.Exit(1)
+        if key == "status":
+            try:
+                resolved: LifecycleState | bool = LifecycleState(value.lower())
+            except ValueError as e:
+                rprint(f"[red]Unknown status: {escape(value)}[/red]", file=sys.stderr)
+                raise typer.Exit(1) from e
+        else:
+            lower = value.lower()
+            if lower not in ("true", "false"):
+                rprint(
+                    f"[red]Invalid value for modified: {escape(value)}"
+                    " — must be true or false.[/red]",
+                    file=sys.stderr,
+                )
+                raise typer.Exit(1)
+            resolved = lower == "true"
+        warning = _apply_marking(match.path, resolved)
+        if warning:
+            rprint(warning, file=sys.stderr)
+            raise typer.Exit(1)
+        display_value = str(resolved) if key == "modified" else value.lower()
+        rprint(
+            f"[green]Marked {escape(skill_name)}: "
+            f"{escape(key)} = {escape(display_value)}.[/green]"
+        )
         return
 
     migrated = [r.path for r in results if r.schema_error is None]
@@ -97,8 +161,19 @@ def mark_skill(
     selected = _prompt_for_skills(migrated)
     if not selected:
         raise typer.Exit(0)
-    state = _prompt_for_state()
+    chosen_key = _prompt_for_key()
+    chosen_value = _prompt_for_value(chosen_key)
     for skill_path in selected:
-        set_skill_lifecycle(skill_path, state)
+        warning = _apply_marking(skill_path, chosen_value)
+        if warning:
+            rprint(warning)
     names = ", ".join(escape(p.parent.name) for p in selected)
-    rprint(f"[green][bold]{names}[/bold] marked as [bold]{state.value}[/bold].[/green]")
+    display = (
+        chosen_value.value
+        if isinstance(chosen_value, LifecycleState)
+        else str(chosen_value).lower()
+    )
+    rprint(
+        f"[green][bold]{names}[/bold] marked: "
+        f"{escape(chosen_key)}={escape(display)}.[/green]"
+    )

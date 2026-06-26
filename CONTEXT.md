@@ -64,6 +64,10 @@ _Avoid_: changed, customised, forked
 An optional field inside the `mysk` frontmatter block, present only when a skill was imported with `--rename`. Records the skill's original name in the upstream source so Refresh can correctly identify and fetch the upstream directory even though the local name differs.
 _Avoid_: original name, remote name
 
+**Marking**:
+A key–value pair applied to a skill via the `mark` command. Valid keys are `status` (sets the lifecycle state) and `modified` (sets the modified flag). One marking is applied per invocation.
+_Avoid_: attribute, field, flag, property
+
 **mysk block**:
 The `mysk:` frontmatter section in `SKILL.md` that contains all mysk-managed metadata. Its presence is the canonical signal that a skill is owned by `mysk`. Generic fields (`name`, `description`) live outside this block and are readable by any agent. The exact key names are recorded in ADR-0003.
 _Avoid_: mysk metadata, mysk config
