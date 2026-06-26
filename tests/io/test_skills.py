@@ -26,18 +26,15 @@ def test_compliant_skill_is_loaded(tmp_path):
     assert r.skill is not None
     assert r.skill.mysk is not None
     assert r.schema_error is None
-    assert not r.is_unmigrated
 
 
-def test_unmigrated_skill_sets_is_unmigrated(tmp_path):
+def test_manually_placed_skill_sets_schema_error(tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\n")
     results = load_skills(tmp_path)
     assert len(results) == 1
     r = results[0]
-    assert r.is_unmigrated
-    assert r.skill is not None
-    assert r.skill.mysk is None
-    assert r.schema_error is None
+    assert r.schema_error == "missing mysk block"
+    assert r.skill is None
 
 
 def test_malformed_block_sets_schema_error(tmp_path):
@@ -51,7 +48,6 @@ def test_malformed_block_sets_schema_error(tmp_path):
     r = results[0]
     assert r.schema_error is not None
     assert r.skill is None
-    assert not r.is_unmigrated
 
 
 def test_results_are_sorted_alphabetically(tmp_path):

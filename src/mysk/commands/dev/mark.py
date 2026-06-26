@@ -25,11 +25,6 @@ def set_skill_lifecycle(skill_path: Path, state: LifecycleState) -> None:
     skill_path.write_text(frontmatter.write(data, body))
 
 
-def _is_migrated(path: Path) -> bool:
-    data, _ = frontmatter.read(path.read_text())
-    return "mysk" in data
-
-
 def _choice_title(path: Path) -> str:
     data, _ = frontmatter.read(path.read_text())
     state = data.get("mysk", {}).get("state", "unknown")
@@ -66,13 +61,22 @@ def dev_mark(
 ) -> None:
     """Interactively set the lifecycle state of a skill."""
     skills_root = skill_library()
-    migrated = [r.path for r in load_skills(skills_root) if not r.is_unmigrated]
+    results = load_skills(skills_root)
 
     if skill_name is not None and status is not None:
-        skill_path = skills_root / skill_name / "SKILL.md"
-        if not skill_path.is_file() or not _is_migrated(skill_path):
+        # find the first result matching the condition
+        match = next((r for r in results if r.path.parent.name == skill_name), None)
+        if match is None:
             rprint(
-                f"[red]{escape(skill_name)} is not a migrated skill.[/red]",
+                f"[red]{escape(skill_name)} not found in the Skill Library.[/red]",
+                file=sys.stderr,
+            )
+            raise typer.Exit(1)
+        if match.schema_error is not None:
+            rprint(
+                f"[red]{escape(skill_name)} is not a valid skill"
+                f" — {match.schema_error}."
+                " Use mysk import to add skills to the library.[/red]",
                 file=sys.stderr,
             )
             raise typer.Exit(1)
@@ -81,9 +85,11 @@ def dev_mark(
         except ValueError as e:
             rprint(f"[red]Unknown status: {escape(status)}[/red]", file=sys.stderr)
             raise typer.Exit(1) from e
-        set_skill_lifecycle(skill_path, state)
+        set_skill_lifecycle(match.path, state)
         rprint(f"[green]Marked {escape(skill_name)} as {state.value}.[/green]")
         return
+
+    migrated = [r.path for r in results if r.schema_error is None]
 
     if not migrated:
         rprint("[dim]No skills in the Skill Library to mark.[/dim]")

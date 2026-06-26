@@ -91,11 +91,11 @@ def test_modified_imported_skill_shows_modified_flag(monkeypatch, tmp_path):
     assert "modified" in result.output
 
 
-def test_unmigrated_skill_shows_needs_migrate(monkeypatch, tmp_path):
+def test_manually_placed_skill_shows_missing_mysk_block(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\n")
     result = _run(monkeypatch, tmp_path)
     assert result.exit_code == 0
-    assert "needs migrate" in result.output
+    assert "missing mysk block" in result.output
 
 
 def test_malformed_skill_shows_malformed(monkeypatch, tmp_path):

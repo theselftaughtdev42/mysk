@@ -69,11 +69,18 @@ def test_noninteractive_sets_state_by_name_and_status(monkeypatch, tmp_path):
     assert "state: experimental" in path.read_text()
 
 
-def test_noninteractive_errors_for_unmigrated_skill(monkeypatch, tmp_path):
+def test_noninteractive_errors_for_manually_placed_skill(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\n")
     result = _run(monkeypatch, tmp_path, extra_args=("foo", "--status", "experimental"))
     assert result.exit_code != 0
-    assert "not a migrated skill" in result.output.lower()
+    assert "missing mysk block" in result.output.lower()
+
+
+def test_noninteractive_errors_when_skill_not_found(monkeypatch, tmp_path):
+    (tmp_path / "skills").mkdir()
+    result = _run(monkeypatch, tmp_path, extra_args=("ghost", "--status", "active"))
+    assert result.exit_code != 0
+    assert "not found" in result.output.lower()
 
 
 def test_skill_choice_title_includes_current_state(tmp_path):

@@ -29,15 +29,13 @@ class SkillLoadResult(BaseModel):
     path: Path
     skill: Skill | None
     schema_error: str | None
-    is_unmigrated: bool
 
 
 def load_skills(skills_root: Path) -> list[SkillLoadResult]:
     """Load every skill under ``skills_root``, sorted alphabetically by name.
 
     Each result carries the parsed ``Skill`` when the frontmatter is valid, or a
-    ``schema_error`` string when the block is present but malformed. Skills with
-    no ``mysk`` block are returned with ``is_unmigrated=True``.
+    ``schema_error`` string when the mysk block is absent or malformed.
     """
     results = []
     for path in sorted(skills_root.glob("*/SKILL.md")):
@@ -46,22 +44,19 @@ def load_skills(skills_root: Path) -> list[SkillLoadResult]:
             skill = Skill.from_frontmatter(data)
         except (ValueError, KeyError) as exc:
             results.append(
+                SkillLoadResult(path=path, skill=None, schema_error=str(exc))
+            )
+            continue
+        if skill.mysk is None:
+            results.append(
                 SkillLoadResult(
                     path=path,
                     skill=None,
-                    schema_error=str(exc),
-                    is_unmigrated=False,
+                    schema_error="missing mysk block",
                 )
             )
             continue
-        results.append(
-            SkillLoadResult(
-                path=path,
-                skill=skill,
-                schema_error=None,
-                is_unmigrated=skill.mysk is None,
-            )
-        )
+        results.append(SkillLoadResult(path=path, skill=skill, schema_error=None))
     return results
 
 

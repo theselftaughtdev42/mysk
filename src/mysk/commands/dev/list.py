@@ -45,10 +45,10 @@ def dev_list() -> None:
             status_cell = "[dim]—[/dim]"
             provenance_cell = "[dim]—[/dim]"
 
-        if r.schema_error is not None:
+        if r.schema_error == "missing mysk block":
+            schema_cell = "[red]missing mysk block[/red]"
+        elif r.schema_error is not None:
             schema_cell = "[red]malformed[/red]"
-        elif r.is_unmigrated:
-            schema_cell = "[yellow]needs migrate[/yellow]"
         else:
             schema_cell = "[green]ok[/green]"
 
