@@ -4,6 +4,67 @@ from mysk.domain import LifecycleState, MyskBlock, Provenance, Skill
 from mysk.io import frontmatter
 
 
+def test_extra_fields_defaults_to_empty():
+    skill = Skill(name="foo", description="does a thing")
+
+    assert skill.extra_fields == {}
+
+
+def test_from_frontmatter_collects_unknown_keys_into_extra_fields():
+    skill = Skill.from_frontmatter(
+        {
+            "name": "foo",
+            "description": "bar",
+            "license": "MIT",
+            "allowed-tools": ["bash"],
+        }
+    )
+
+    assert skill.extra_fields == {"license": "MIT", "allowed-tools": ["bash"]}
+
+
+def test_to_frontmatter_emits_extra_fields_between_description_and_mysk():
+    skill = Skill(
+        name="foo",
+        description="bar",
+        mysk=MyskBlock(state=LifecycleState.ACTIVE),
+        extra_fields={"license": "MIT"},
+    )
+
+    result = skill.to_frontmatter()
+    keys = list(result.keys())
+
+    assert result["license"] == "MIT"
+    assert keys.index("description") < keys.index("license") < keys.index("mysk")
+
+
+def test_skill_with_extra_fields_survives_round_trip():
+    skill = Skill(
+        name="foo",
+        description="bar",
+        mysk=MyskBlock(state=LifecycleState.ACTIVE),
+        extra_fields={"license": "MIT", "allowed-tools": ["bash"]},
+    )
+
+    assert Skill.from_frontmatter(skill.to_frontmatter()) == skill
+
+
+def test_known_keys_excluded_from_extra_fields():
+    skill = Skill.from_frontmatter(
+        {
+            "name": "foo",
+            "description": "bar",
+            "mysk": {"state": "active"},
+            "license": "MIT",
+        }
+    )
+
+    assert "name" not in skill.extra_fields
+    assert "description" not in skill.extra_fields
+    assert "mysk" not in skill.extra_fields
+    assert skill.extra_fields == {"license": "MIT"}
+
+
 def test_unmigrated_skill_has_no_mysk_block():
     skill = Skill(name="foo", description="does a thing")
 

@@ -1,6 +1,6 @@
-from typing import Self
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from mysk.domain.lifecycle import LifecycleState
 from mysk.domain.mysk_block import MyskBlock
@@ -20,6 +20,7 @@ class Skill(BaseModel):
     name: str
     description: str
     mysk: MyskBlock | None = None
+    extra_fields: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_frontmatter(cls, data: dict) -> Self:
@@ -45,13 +46,21 @@ class Skill(BaseModel):
                     upstream_name=raw.get("upstream_name"),
                 ),
             )
-        return cls(name=data["name"], description=data["description"], mysk=block)
+        _known = {"name", "description", "mysk"}
+        extra = {k: v for k, v in data.items() if k not in _known}
+        return cls(
+            name=data["name"],
+            description=data["description"],
+            mysk=block,
+            extra_fields=extra,
+        )
 
     def to_frontmatter(self) -> dict:
         """Render to a frontmatter dict: generic fields, plus the `mysk` block only
         if the skill is owned. An un-migrated skill emits no `mysk` key.
         """
         result: dict = {"name": self.name, "description": self.description}
+        result.update(self.extra_fields)
         if self.mysk is not None:
             block: dict = {"state": self.mysk.state.value}
             if self.mysk.provenance.is_imported:

@@ -138,6 +138,7 @@ def _import_from_local_dir(path: Path) -> None:
             name=local_name,
             description=local_skill.description,
             mysk=mysk_block,
+            extra_fields=local_skill.extra_fields,
         )
         dest = library / local_name
         _write_skill_to_library(
@@ -294,6 +295,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
         name=local_name,
         description=local_skill.description,
         mysk=mysk_block,
+        extra_fields=local_skill.extra_fields,
     )
 
     dest = library / local_name
@@ -383,6 +385,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
             name=local_name,
             description=downloaded_skill.description,
             mysk=mysk_block,
+            extra_fields=downloaded_skill.extra_fields,
         )
         dest = library / local_name
         _write_skill_to_library(

@@ -143,6 +143,7 @@ def _refresh_one(name: str, library: Path) -> None:
             name=name,
             description=upstream_skill.description,
             mysk=skill.mysk,
+            extra_fields=upstream_skill.extra_fields,
         )
         new_skill_md = frontmatter.write(refreshed.to_frontmatter(), upstream_body)
 

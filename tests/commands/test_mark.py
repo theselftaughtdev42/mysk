@@ -283,6 +283,17 @@ def test_interactive_marks_multiple_skills_with_same_state(monkeypatch, tmp_path
     assert "state: deprecated" in bar.read_text()
 
 
+def test_mark_preserves_extra_fields(tmp_path):
+    path = _skill(
+        tmp_path,
+        "foo",
+        "name: foo\ndescription: d\nlicense: MIT\nmysk:\n  state: active\n",
+    )
+    mark.set_skill_lifecycle(path, LifecycleState.EXPERIMENTAL)
+
+    assert "license: MIT" in path.read_text()
+
+
 def test_interactive_modified_warns_and_skips_self_authored(monkeypatch, tmp_path):
     imported = _skill(
         tmp_path, "imp", _IMPORTED_FM.format(name="imp", modified="false")

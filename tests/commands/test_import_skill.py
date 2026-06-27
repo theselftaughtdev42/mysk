@@ -1141,3 +1141,67 @@ def test_import_from_local_dir_skips_when_collision_rename_blank(tmp_path, monke
     assert (library / "skill-b" / "SKILL.md").exists()
     assert "original" in (library / "skill-a" / "SKILL.md").read_text()
     assert "2 of 2" in result.output
+
+
+_SKILL_MD_WITH_EXTRAS = (
+    "---\nname: my-skill\ndescription: does cool things\n"
+    "license: MIT\nallowed-tools:\n- bash\n---\n# my-skill\n"
+)
+
+
+@respx.mock
+def test_import_single_preserves_extra_fields(tmp_path, monkeypatch):
+    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+    _mock_select("active", monkeypatch)
+    respx.get(_TARBALL_URL).mock(
+        return_value=httpx.Response(
+            200, content=_make_tarball("skills/my-skill", _SKILL_MD_WITH_EXTRAS)
+        )
+    )
+
+    result = runner.invoke(app, ["import", _RAW_URL])
+
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    assert "license: MIT" in text
+    assert "allowed-tools" in text
+
+
+def test_import_from_local_path_preserves_extra_fields(tmp_path, monkeypatch):
+    library = tmp_path / "library"
+    library.mkdir()
+    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+    _mock_select("active", monkeypatch)
+
+    skill_src = tmp_path / "my-skill"
+    skill_src.mkdir()
+    (skill_src / "SKILL.md").write_text(_SKILL_MD_WITH_EXTRAS)
+
+    result = runner.invoke(app, ["import", str(skill_src)])
+
+    assert result.exit_code == 0, result.output
+    text = (library / "my-skill" / "SKILL.md").read_text()
+    assert "license: MIT" in text
+    assert "allowed-tools" in text
+
+
+def test_import_from_local_dir_preserves_extra_fields(tmp_path, monkeypatch):
+    library = tmp_path / "library"
+    library.mkdir()
+    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+
+    collection = tmp_path / "my-collection"
+    collection.mkdir()
+    skill_dir = collection / "my-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(_SKILL_MD_WITH_EXTRAS)
+
+    _mock_checkbox(["my-skill"], monkeypatch)
+    _mock_select("active", monkeypatch)
+
+    result = runner.invoke(app, ["import", str(collection)])
+
+    assert result.exit_code == 0, result.output
+    text = (library / "my-skill" / "SKILL.md").read_text()
+    assert "license: MIT" in text
+    assert "allowed-tools" in text

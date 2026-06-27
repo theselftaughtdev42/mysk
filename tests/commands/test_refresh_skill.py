@@ -356,6 +356,30 @@ def test_refresh_updates_and_removes_extra_local_files_when_file_sets_differ(
 
 
 @respx.mock
+def test_refresh_takes_extra_fields_from_upstream(tmp_path, monkeypatch):
+    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+    skill_dir = tmp_path / "my-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(_installed_skill_md())
+
+    upstream_md = (
+        "---\nname: my-skill\ndescription: improved description\n"
+        "license: Apache-2.0\n---\n# my-skill\n"
+    )
+    respx.get(_TARBALL_URL).mock(
+        return_value=httpx.Response(
+            200, content=_make_tarball("skills/my-skill", upstream_md)
+        )
+    )
+
+    result = runner.invoke(app, ["refresh", "my-skill"])
+
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    assert "license: Apache-2.0" in text
+
+
+@respx.mock
 def test_refresh_all_mixed_modified(tmp_path, monkeypatch):
     monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
 
