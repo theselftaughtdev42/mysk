@@ -9,11 +9,11 @@ We chose verbose keys because a token spike using `tiktoken` showed abbreviation
 - **Abbreviated keys** (`st`, `src`, `mod`) — rejected: identical token cost, worse readability.
 - **Hybrid** (mix of full and short) — rejected: no measurable benefit and inconsistent.
 - **Independent boolean lifecycle flags** (`experimental`/`deprecated`) — rejected: lifecycle states are mutually exclusive, so independent booleans permit invalid combinations (e.g. `experimental: true` + `deprecated: true`). A single `state` key makes mutual exclusivity structural.
-- **Keyless Active** (omit `state` when Active, defaulting on read) — rejected: it saves ~4 tokens per Active skill but makes the data non-uniform and forces the reader to guess. Writing `state: active` everywhere lets `from_frontmatter` be strict and fail-fast on un-migrated files; the `migrate` command backfills `state` for legacy skills.
+- **Keyless Active** (omit `state` when Active, defaulting on read) — rejected: it saves ~4 tokens per Active skill but makes the data non-uniform and forces the reader to guess. Writing `state: active` everywhere lets `from_frontmatter` be strict and fail-fast on skills missing a block.
 
 ## Consequences
 
-- The `mysk:` block is optional: a skill with no block has yet to be migrated and is not owned (ADR-0001). The domain layer never fabricates a block or a default `state` — adopting a skill is the `migrate` command's job.
+- The `mysk:` block is optional: a skill with no block is not controlled by mysk (ADR-0001).
 - When the block *is* present it must carry an explicit `state` (one of `active`, `experimental`, `deprecated`). A present-but-stateless block is malformed: `from_frontmatter` raises.
 - Adding a future lifecycle state means adding a `state` value, not a new key.
 

@@ -1,3 +1,5 @@
+cache-dir = "~/.cache/ruff"
+
 [lint]
 select = [
     "E",

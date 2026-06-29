@@ -23,11 +23,9 @@ The `Annotated` form cleanly separates the Python default from the CLI metadata,
 Each command group owns its own `app = typer.Typer(...)` instance in its package `__init__.py`. The root `cli.py` composes groups via `app.add_typer(group.app, name="...")` — it does not create sub-apps itself.
 
 ```
-commands/dev/__init__.py   ← defines dev app, registers dev commands
-cli.py                     ← imports dev.app, calls app.add_typer(dev_app, name="dev")
+commands/import_skill/__init__.py   ← defines import app, registers import commands
+cli.py                              ← imports import_skill.app, calls app.add_typer(import_skill.app, name="import")
 ```
-
-Individual commands on the root app are still registered in `cli.py` via `app.command("name")(func)` — the functional form of the decorator, equivalent to `@app.command("name")` on a locally-defined function.
 
 ## Output
 

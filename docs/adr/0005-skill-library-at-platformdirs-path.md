@@ -10,7 +10,6 @@ Imported skills are stored at `platformdirs.user_data_dir("mysk") / "skills"`, o
 
 ## Consequences
 
-- `find_source_repo()` and `src/mysk/io/source_repo.py` are removed. All commands resolve the Skill Library via a single `skill_library()` function that returns the platformdirs path (or `MYSK_SKILLS_DIR` override).
-- The `dev` command group's implicit gatekeeping — which previously required being inside the source repo — is removed. Dev commands now operate on the Skill Library directly.
+- All commands resolve the Skill Library via a single `skill_library()` function that returns the platformdirs path (or `MYSK_SKILLS_DIR` override).
 - `platformdirs` is added as a runtime dependency.
 - `MYSK_SKILLS_DIR` provides an escape hatch for testing and for users who want to manage skills in a version-controlled directory of their own choosing.
