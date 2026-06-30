@@ -1,3 +1,5 @@
+"""Entry point for the mysk CLI application."""
+
 import typer
 
 from mysk.commands import (
@@ -6,10 +8,12 @@ from mysk.commands import (
     deploy,
     import_skill,
     library,
-    list,
     mark,
     refresh_skill,
     undeploy,
+)
+from mysk.commands import (
+    list as list_skills,
 )
 
 app = typer.Typer(
@@ -25,7 +29,7 @@ app.add_typer(deploy.app, name="deploy")
 app.add_typer(cleanup.app, name="cleanup")
 app.add_typer(delete_skill.app, name="delete")
 app.add_typer(library.app, name="library")
-app.add_typer(list.app, name="list")
+app.add_typer(list_skills.app, name="list")
 app.add_typer(mark.app, name="mark")
 app.add_typer(refresh_skill.app, name="refresh")
 app.add_typer(undeploy.app, name="undeploy")

@@ -1,3 +1,5 @@
+"""Skill domain model: identity fields plus an optional mysk ownership block."""
+
 from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,9 +37,8 @@ class Skill(BaseModel):
         if "mysk" in data:
             raw = data["mysk"]
             if not isinstance(raw, dict) or "state" not in raw:
-                raise ValueError(
-                    "mysk block exists but is missing required 'state' key"
-                )
+                msg = "mysk block exists but is missing required 'state' key"
+                raise ValueError(msg)
             block = MyskBlock(
                 state=LifecycleState(raw["state"]),
                 provenance=Provenance(
@@ -56,8 +57,9 @@ class Skill(BaseModel):
         )
 
     def to_frontmatter(self) -> dict:
-        """Render to a frontmatter dict: generic fields, plus the `mysk` block only
-        if the skill is owned. An un-migrated skill emits no `mysk` key.
+        """Render to a frontmatter dict with generic fields and the `mysk` block.
+
+        An un-migrated skill emits no `mysk` key.
         """
         result: dict = {"name": self.name, "description": self.description}
         result.update(self.extra_fields)

@@ -1,3 +1,5 @@
+"""MyskBlock: the ownership block written into a skill's SKILL.md frontmatter."""
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from mysk.domain.lifecycle import LifecycleState

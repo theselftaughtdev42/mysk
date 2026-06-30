@@ -1,3 +1,5 @@
+"""SKILL.md frontmatter parsing and serialisation (YAML between `---` fences)."""
+
 import yaml
 
 _FENCE = "---"

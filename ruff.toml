@@ -1,12 +1,123 @@
 cache-dir = "~/.cache/ruff"
 
 [lint]
-select = [
-    "E",
-    "F",
-    "I",
-    "N",
-    "UP",
-    "B",
-    "SIM"
+extend-select = [
+    # "AIR", # Airflow
+    "ERA",  # eradicate
+    "FAST", # FastAPI
+    "YTT", # flake8-2020
+    "ANN", # flake8-annotations
+    "ASYNC", # flake8-async
+    "S", # bandit
+    "BLE", # flake8-blind-except
+    "FBT", # flake8-boolean-trap
+    "B", # flake8-bugbear
+    "A", # flake8-builtins
+    "COM", # flake8-commas
+    "C4", # flake8-comprehensions
+    # "CPY", # flake8-copyright (preview)
+    "DTZ", # flake8-datetimez
+    "T10", # flake8-debugger
+    # "DJ", # flake8-django
+    "EM", # flake8-errmsg
+    "EXE", # flake8-executable
+    "FIX", # flake8-fixme
+    # "FA", flake8-future-annotations
+    "INT", # flake8-gettext
+    "ISC", # flake8-implicit-str-concat
+    "ICN", # flake8-import-conventions
+    "LOG", # flake8-logging
+    "G", # flake8-logging-format
+    "INP", # flake8-no-pep420
+    "PIE", # flake8-pie
+    "T20", # flake8-print
+    # "PYI", # flake8-pyi
+    "PT", # flake8-pytest-style
+    "Q", # flake8-quotes
+    "RSE", # flake8-raise
+    "RET", # flake8-return
+    "SLF", # flake8-self
+    "SIM", # flake8-simplify
+    "SLOT", # flake8-slots
+    "TID", # flake8-tidy-imports
+    "TD", # flake8-todos
+    "TC", # flake8-type-checking
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+    "FLY", # flynt
+    "I", # isort
+    "C90", # mccabe
+    "NPY", # numpy-specific rules
+    "PD", # pandas-vet
+    "N", # pep8-naming (optional)
+    "PERF", #perlint (performance)
+    "E", # pycodestyle errors
+    "W", # pycodestyle warnings (optional)
+    # "DOC", # pydoclint — requires preview mode
+    "D", # pydocstyle
+    "F", # Pyflakes
+    "PGH", # pygrep-hooks
+    "PLC", # pylint-convention
+    "PLE", # pylint-error
+    "PLR", # pylint-refactor
+    "PLW", # pylint-warning
+    "UP", # pyupgrade
+    "FURB", # refurb
+    "RUF", # ruff-specific
+    "TRY", # tryceratops
+]
+ignore = [
+    # ignore list as recommended by https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "W191",
+    "E111",
+    "E114",
+    "E117",
+    "D203",
+    "D206",
+    "D300",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "Q004",
+    "COM812",
+    "COM819",
+    "ISC001",
+    "ISC002",
+]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.mccabe]
+max-complexity = 15
+
+[lint.pylint]
+max-branches = 15 # default is 12
+max-statements = 60 # default is 50
+max-args = 7 # default is 5
+
+[lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # asserts are standard pytest practice
+    "ARG001",  # test stubs/callbacks often have unused args
+    "ARG005",  # test lambdas often have unused args
+    "ANN001",  # no type annotations needed in tests
+    "ANN002",  # no type annotations needed in tests
+    "ANN003",  # no type annotations needed in tests
+    "ANN202",  # no return-type annotations needed in tests
+    "ANN201",  # no return-type annotations needed in tests
+    "D100",    # no module docstrings needed in tests
+    "D101",    # no class docstrings needed in tests
+    "D102",    # no method docstrings needed in tests
+    "D103",    # no function docstrings needed in tests
+    "D104",    # no package docstrings needed in tests
+    "D205",    # no docstring formatting enforced in tests
+    "FBT001",  # boolean args in test stubs are fine
+    "FBT002",  # boolean defaults in test stubs are fine
+    "FBT003",  # boolean positional values in test calls are fine
+    "SLF001",  # tests access private members intentionally
+]
+"src/mysk/commands/*.py" = [
+    "FBT003", # typer.Option(False, ...) is idiomatic Typer; param_decls can't follow keyword
 ]

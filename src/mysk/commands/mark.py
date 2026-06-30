@@ -1,3 +1,5 @@
+"""Command to interactively set markings (state, modified, etc) on skills."""
+
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -24,18 +26,19 @@ _SELECTABLE_STATES = [
 _VALID_KEYS = ["status", "modified"]
 
 
-def set_skill_modified(skill_path: Path, value: bool) -> None:
+def set_skill_modified(skill_path: Path, *, value: bool) -> None:
+    """Write the `modified` flag on an imported skill's SKILL.md."""
     text = skill_path.read_text()
     data, body = frontmatter.read(text)
     if not data.get("mysk", {}).get("source"):
-        raise ValueError(
-            "skill is self-authored; modified only applies to imported skills"
-        )
+        msg = "skill is self-authored; modified only applies to imported skills"
+        raise ValueError(msg)
     data["mysk"]["modified"] = value
     skill_path.write_text(frontmatter.write(data, body))
 
 
 def set_skill_lifecycle(skill_path: Path, state: LifecycleState) -> None:
+    """Write the lifecycle `state` on a skill's SKILL.md."""
     text = skill_path.read_text()
     data, body = frontmatter.read(text)
     data["mysk"]["state"] = state.value
@@ -80,16 +83,17 @@ def _prompt_for_value(key: str) -> LifecycleState | bool:
     ).ask()
 
 
-def _apply_marking(skill_path: Path, value: LifecycleState | bool) -> str | None:
+def _apply_marking(skill_path: Path, *, value: LifecycleState | bool) -> str | None:
     if isinstance(value, LifecycleState):
         set_skill_lifecycle(skill_path, value)
         return None
     try:
-        set_skill_modified(skill_path, value)
-        return None
+        set_skill_modified(skill_path, value=value)
     except ValueError:
         name = escape(skill_path.parent.name)
         return f"[yellow]{name} is self-authored — skipping.[/yellow]"
+    else:
+        return None
 
 
 @app.callback()
@@ -146,7 +150,7 @@ def mark_skill(
                 )
                 raise typer.Exit(1)
             resolved = lower == "true"
-        warning = _apply_marking(match.path, resolved)
+        warning = _apply_marking(match.path, value=resolved)
         if warning:
             rprint(warning, file=sys.stderr)
             raise typer.Exit(1)
@@ -169,7 +173,7 @@ def mark_skill(
     chosen_key = _prompt_for_key()
     chosen_value = _prompt_for_value(chosen_key)
     for skill_path in selected:
-        warning = _apply_marking(skill_path, chosen_value)
+        warning = _apply_marking(skill_path, value=chosen_value)
         if warning:
             rprint(warning)
     names = ", ".join(escape(p.parent.name) for p in selected)

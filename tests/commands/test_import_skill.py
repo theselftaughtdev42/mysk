@@ -41,16 +41,6 @@ def _mock_select(answer: str, monkeypatch):
     )
 
 
-def _mock_select_sequence(answers: list[str], monkeypatch):
-    answers_iter = iter(answers)
-
-    def _select(*a, **kw):
-        val = next(answers_iter)
-        return type("Q", (), {"ask": staticmethod(lambda v=val: v)})()
-
-    monkeypatch.setattr(import_cmd.questionary, "select", _select)
-
-
 def _mock_text(answer: str, monkeypatch):
     monkeypatch.setattr(
         import_cmd.questionary,

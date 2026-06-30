@@ -1,3 +1,5 @@
+"""Command to list all skills and their deployment status."""
+
 import typer
 from rich import print as rprint
 from rich.console import Console

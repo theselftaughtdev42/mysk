@@ -1,3 +1,5 @@
+"""GitHub API access: skill tarball download and repo tree scanning."""
+
 import io
 import shutil
 import tarfile
@@ -10,7 +12,7 @@ from mysk.domain.import_url import ImportUrl, RepoRootUrl
 
 
 class DownloadError(Exception):
-    pass
+    """Raised when a GitHub download or API request fails."""
 
 
 def download_skill(url: ImportUrl, dest: Path) -> None:
@@ -21,9 +23,8 @@ def download_skill(url: ImportUrl, dest: Path) -> None:
     """
     response = httpx.get(url.tarball_url(), follow_redirects=True)
     if response.is_error:
-        raise DownloadError(
-            f"Failed to download {url.tarball_url()!r}: HTTP {response.status_code}"
-        )
+        msg = f"Failed to download {url.tarball_url()!r}: HTTP {response.status_code}"
+        raise DownloadError(msg)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -38,13 +39,15 @@ def scan_repo_for_skills(url: RepoRootUrl, ref: str = "HEAD") -> list[str]:
     """Return paths of directories in *url*'s repo that contain a SKILL.md."""
     response = httpx.get(url.trees_api_url(ref))
     if response.is_error:
-        raise DownloadError(f"Failed to fetch repo tree: HTTP {response.status_code}")
+        msg = f"Failed to fetch repo tree: HTTP {response.status_code}"
+        raise DownloadError(msg)
     payload = response.json()
     if payload.get("truncated"):
-        raise DownloadError(
+        msg = (
             "Repository tree was truncated by GitHub (too many objects). "
             "Import a specific skill URL instead of the repo root."
         )
+        raise DownloadError(msg)
     tree = payload.get("tree", [])
     skill_md_paths = [
         entry["path"]
@@ -60,6 +63,5 @@ def _find_skill_dir(extracted: Path, skill_path: str) -> Path:
         candidate = top_dirs[0] / skill_path
         if candidate.is_dir():
             return candidate
-    raise DownloadError(
-        f"Could not find skill directory {skill_path!r} in the downloaded archive."
-    )
+    msg = f"Could not find skill directory {skill_path!r} in the downloaded archive."
+    raise DownloadError(msg)

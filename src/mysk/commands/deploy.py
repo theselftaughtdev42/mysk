@@ -1,14 +1,17 @@
+"""Command to deploy skills to selected Deployment Targets."""
+
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import questionary
 import typer
-from rich import print as rprint
 
-from mysk.domain.skill import Skill
 from mysk.io.deploy import reconcile_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
+
+if TYPE_CHECKING:
+    from mysk.domain.skill import Skill
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -28,6 +31,7 @@ def _ensure_target_dir(path: Path) -> str | None:
 
 @app.callback()
 def deploy(
+    *,
     overwrite: bool = typer.Option(
         False, "--overwrite", help="Replace non-symlink directories at collision paths."
     ),
@@ -49,7 +53,7 @@ def deploy(
 ) -> None:
     """Deploy skills to selected Deployment Targets."""
     if skills_all and skills is not None:
-        print("Cannot combine --skills-all with --skills.")
+        typer.echo("Cannot combine --skills-all with --skills.")
         raise typer.Exit(1)
 
     targets = discover_targets()
@@ -59,7 +63,7 @@ def deploy(
         known = {t.name for t in targets}
         unknown = names - known
         if unknown:
-            print(f"Unknown agent(s): {', '.join(sorted(unknown))}")
+            typer.echo(f"Unknown agent(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
         selected_targets = [t for t in targets if t.name in names]
     else:
@@ -69,7 +73,7 @@ def deploy(
         ).ask()
 
     if not selected_targets:
-        print("Nothing selected.")
+        typer.echo("Nothing selected.")
         raise typer.Exit(0)
 
     library = skill_library()
@@ -77,7 +81,7 @@ def deploy(
     deployable = [r for r in all_skills if r.skill and r.skill.mysk]
 
     if not deployable:
-        rprint("[dim]No skills in the Skill Library to deploy.")
+        typer.echo("No skills in the Skill Library to deploy.")
         raise typer.Exit(0)
 
     if skills_all:
@@ -87,7 +91,7 @@ def deploy(
         known = {r.skill.name for r in deployable if r.skill is not None}
         unknown = names - known
         if unknown:
-            print(f"Unknown skill(s): {', '.join(sorted(unknown))}")
+            typer.echo(f"Unknown skill(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
         selected_skills = [
             r for r in deployable if r.skill is not None and r.skill.name in names
@@ -105,16 +109,16 @@ def deploy(
         ).ask()
 
     if not selected_skills:
-        print("Nothing selected.")
+        typer.echo("Nothing selected.")
         raise typer.Exit(0)
 
     for target in selected_targets:
-        print(f"\n{target.name}:")
+        typer.echo(f"\n{target.name}:")
         created = _ensure_target_dir(target.path)
         if created:
-            print(f"  Created {created}")
+            typer.echo(f"  Created {created}")
         for skill_result in selected_skills:
-            skill = cast(Skill, skill_result.skill)
+            skill = cast("Skill", skill_result.skill)
             source_dir = skill_result.path.parent
             target_path = target.path / skill.name
             result = reconcile_skill(
@@ -126,4 +130,4 @@ def deploy(
             line = f"  {skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            print(line)
+            typer.echo(line)

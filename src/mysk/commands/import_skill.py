@@ -1,3 +1,5 @@
+"""Command to import a skill from a GitHub URL or local directory."""
+
 import shutil
 import tempfile
 from pathlib import Path
@@ -145,7 +147,6 @@ def _import_from_local_dir(path: Path) -> None:
             skill_dir, frontmatter.write(final_skill.to_frontmatter(), body), dest
         )
         imported += 1
-        print(f"Imported {local_name!r} ({state_value}).")
 
     _console.print()
     _console.print(Rule(style="dim"))
@@ -303,8 +304,6 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
         path, frontmatter.write(final_skill.to_frontmatter(), body), dest
     )
 
-    print(f"Imported {local_name!r} ({state_value}).")
-
 
 def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     upstream_dir_name = import_url.skill_dir_name
@@ -391,5 +390,3 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
         _write_skill_to_library(
             tmp_skill_dir, frontmatter.write(final_skill.to_frontmatter(), body), dest
         )
-
-    print(f"Imported {local_name!r} ({state_value}).")

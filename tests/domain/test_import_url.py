@@ -16,7 +16,7 @@ def test_parse_valid_url():
 
 
 def test_parse_rejects_non_github_host():
-    with pytest.raises(ValueError, match="Only github.com URLs are supported"):
+    with pytest.raises(ValueError, match=r"Only github\.com URLs are supported"):
         ImportUrl.parse(
             "https://gitlab.com/alice/cool-skills/tree/main/skills/my-skill"
         )
@@ -35,7 +35,7 @@ def test_repo_root_url_parse_valid():
 
 
 def test_repo_root_url_rejects_non_github_host():
-    with pytest.raises(ValueError, match="Only github.com URLs are supported"):
+    with pytest.raises(ValueError, match=r"Only github\.com URLs are supported"):
         RepoRootUrl.parse("https://gitlab.com/alice/cool-skills")
 
 

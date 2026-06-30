@@ -1,3 +1,5 @@
+"""Skill Library filesystem access: loading, collision checking, path resolution."""
+
 import os
 from pathlib import Path
 
@@ -19,8 +21,8 @@ def skill_library_path() -> Path:
 def skill_library() -> Path:
     """Resolve the Skill Library directory, creating it if absent.
 
-    Returns ``platformdirs.user_data_dir("mysk") / "skills"`` by default, or the
-    ``MYSK_SKILLS_DIR`` path when that environment variable is set.
+    Returns `platformdirs.user_data_dir("mysk") / "skills"` by default, or the
+    `MYSK_SKILLS_DIR` path when that environment variable is set.
     """
     override = os.environ.get("MYSK_SKILLS_DIR")
     if override:
@@ -32,6 +34,8 @@ def skill_library() -> Path:
 
 
 class SkillLoadResult(BaseModel):
+    """Result of loading a single SKILL.md: the parsed skill or a schema error."""
+
     model_config = ConfigDict(frozen=True)
 
     path: Path
@@ -40,10 +44,10 @@ class SkillLoadResult(BaseModel):
 
 
 def load_skills(skills_root: Path) -> list[SkillLoadResult]:
-    """Load every skill under ``skills_root``, sorted alphabetically by name.
+    """Load every skill under `skills_root`, sorted alphabetically by name.
 
-    Each result carries the parsed ``Skill`` when the frontmatter is valid, or a
-    ``schema_error`` string when the mysk block is absent or malformed.
+    Each result carries the parsed `Skill` when the frontmatter is valid, or a
+    `schema_error` string when the mysk block is absent or malformed.
     """
     results = []
     for path in sorted(skills_root.glob("*/SKILL.md")):
@@ -69,16 +73,16 @@ def load_skills(skills_root: Path) -> list[SkillLoadResult]:
 
 
 class CollisionError(Exception):
-    pass
+    """Raised when a skill with the same name already exists in the Skill Library."""
 
 
 def check_collision(library: Path, name: str, source: str | None) -> None:
     """Raise CollisionError if *name* already exists in the Skill Library.
 
     Three cases:
-    - Same name + same source  → suggest ``mysk refresh <name>``
-    - Same name + different source → suggest ``--rename``
-    - Same name + self-authored (no source) → suggest ``--rename``
+    - Same name + same source  → suggest `mysk refresh <name>`
+    - Same name + different source → suggest `--rename`
+    - Same name + self-authored (no source) → suggest `--rename`
     """
     skill_md = library / name / "SKILL.md"
     if not skill_md.exists():
@@ -88,19 +92,22 @@ def check_collision(library: Path, name: str, source: str | None) -> None:
     try:
         existing = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        raise CollisionError(
+        msg = (
             f"A skill named {name!r} already exists in the Skill Library but its "
             f"frontmatter is malformed. Resolve it manually before importing."
-        ) from exc
+        )
+        raise CollisionError(msg) from exc
 
     existing_source = (
         existing.mysk.provenance.source if existing.mysk is not None else None
     )
 
     if existing_source == source:
-        raise CollisionError(
+        msg = (
             f"A skill named {name!r} from the same source is already in the Skill "
             f"Library. To update it run: mysk refresh {name}"
         )
+        raise CollisionError(msg)
 
-    raise CollisionError(f"A skill named {name!r} already exists in the Skill Library")
+    msg = f"A skill named {name!r} already exists in the Skill Library"
+    raise CollisionError(msg)

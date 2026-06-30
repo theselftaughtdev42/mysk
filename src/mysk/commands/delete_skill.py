@@ -1,9 +1,10 @@
+"""Command to delete a skill from the Skill Library and all Deployment Targets."""
+
 import shutil
 from pathlib import Path
 
 import questionary
 import typer
-from rich import print as rprint
 
 from mysk.domain.naming import validate_skill_name
 from mysk.domain.skill import Skill
@@ -23,14 +24,16 @@ def _is_modified(skill_dir: Path) -> bool:
     try:
         data, _ = frontmatter.read(skill_md.read_text())
         skill = Skill.from_frontmatter(data)
-        return skill.mysk is not None and skill.mysk.provenance.modified
-    except Exception:
+    except (OSError, ValueError, KeyError):
         return False
+    else:
+        return skill.mysk is not None and skill.mysk.provenance.modified
 
 
 @app.callback()
 def delete_skill(
     name: str = typer.Argument(..., help="Name of the skill to delete."),
+    *,
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Delete a skill from the Skill Library and all Deployment Targets."""
@@ -39,20 +42,20 @@ def delete_skill(
     try:
         validate_skill_name(name)
     except ValueError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from None
 
     library = skill_library()
     skill_dir = library / name
 
     if not skill_dir.is_dir():
-        print(f"Skill '{name}' not found in the Skill Library.")
+        typer.echo(f"Skill '{name}' not found in the Skill Library.")
         raise typer.Exit(1)
 
     if not yes:
         if _is_modified(skill_dir):
-            rprint(
-                f"[bold red]Warning:[/bold red] '{name}' has local modifications "
+            typer.echo(
+                f"Warning: '{name}' has local modifications "
                 "that will be permanently lost."
             )
             message = (
@@ -66,7 +69,7 @@ def delete_skill(
 
         confirmed = questionary.confirm(message).ask()
         if not confirmed:
-            print("Aborted.")
+            typer.echo("Aborted.")
             raise typer.Exit(0)
 
     targets = discover_targets()
@@ -80,4 +83,4 @@ def delete_skill(
             target_path.unlink()
 
     shutil.rmtree(skill_dir)
-    print(f"Deleted '{name}'.")
+    typer.echo(f"Deleted '{name}'.")

@@ -1,13 +1,16 @@
-from typing import cast
+"""Command to remove deployed skills from selected Deployment Targets."""
+
+from typing import TYPE_CHECKING, cast
 
 import questionary
 import typer
-from rich import print as rprint
 
-from mysk.domain.skill import Skill
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets, is_deployed
+
+if TYPE_CHECKING:
+    from mysk.domain.skill import Skill
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -26,6 +29,7 @@ def undeploy(
         "--skills",
         help="Comma-separated skill names to undeploy; skips the skill prompt.",
     ),
+    *,
     skills_all: bool = typer.Option(
         False,
         "--skills-all",
@@ -34,7 +38,7 @@ def undeploy(
 ) -> None:
     """Remove deployed skills from selected Deployment Targets."""
     if skills_all and skills is not None:
-        print("Cannot combine --skills-all with --skills.")
+        typer.echo("Cannot combine --skills-all with --skills.")
         raise typer.Exit(1)
 
     targets = discover_targets()
@@ -44,7 +48,7 @@ def undeploy(
         known = {t.name for t in targets}
         unknown = names - known
         if unknown:
-            print(f"Unknown agent(s): {', '.join(sorted(unknown))}")
+            typer.echo(f"Unknown agent(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
         selected_targets = [t for t in targets if t.name in names]
     else:
@@ -54,7 +58,7 @@ def undeploy(
         ).ask()
 
     if not selected_targets:
-        print("Nothing selected.")
+        typer.echo("Nothing selected.")
         raise typer.Exit(0)
 
     library = skill_library()
@@ -68,7 +72,7 @@ def undeploy(
     ]
 
     if not deployed:
-        rprint("[dim]No skills deployed to the selected targets.")
+        typer.echo("No skills deployed to the selected targets.")
         raise typer.Exit(0)
 
     if skills_all:
@@ -78,7 +82,7 @@ def undeploy(
         known = {r.skill.name for r in deployable if r.skill is not None}
         unknown = names - known
         if unknown:
-            print(f"Unknown skill(s): {', '.join(sorted(unknown))}")
+            typer.echo(f"Unknown skill(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
         selected_skills = [
             r for r in deployable if r.skill is not None and r.skill.name in names
@@ -96,16 +100,16 @@ def undeploy(
         ).ask()
 
     if not selected_skills:
-        print("Nothing selected.")
+        typer.echo("Nothing selected.")
         raise typer.Exit(0)
 
     for target in selected_targets:
-        print(f"\n{target.name}:")
+        typer.echo(f"\n{target.name}:")
         for skill_result in selected_skills:
-            skill = cast(Skill, skill_result.skill)
+            skill = cast("Skill", skill_result.skill)
             target_path = target.path / skill.name
             result = remove_skill(target_path, skill_library_path=library)
             line = f"  {skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            print(line)
+            typer.echo(line)

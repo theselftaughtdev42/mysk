@@ -1,3 +1,5 @@
+"""Provenance model: tracks whether a skill is self-authored or imported."""
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -16,4 +18,5 @@ class Provenance(BaseModel):
 
     @property
     def is_imported(self) -> bool:
+        """Return True when this skill was imported from an external source URL."""
         return self.source is not None

@@ -1,3 +1,5 @@
+"""Deployment Target discovery and skill-presence checks."""
+
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -13,12 +15,15 @@ _KNOWN: list[tuple[str, str]] = [
 
 
 class Target(BaseModel):
+    """A known Deployment Target: an agent's skills directory on the filesystem."""
+
     model_config = ConfigDict(frozen=True)
 
     name: str
     path: Path
 
     def label(self) -> str:
+        """Return a human-readable label like `~/.claude/skills (claude)`."""
         try:
             display = "~/" + str(self.path.relative_to(Path.home()))
         except ValueError:
@@ -27,6 +32,7 @@ class Target(BaseModel):
 
 
 def is_deployed(target: Target, skill: Skill) -> bool:
+    """Return True if *skill* has a mysk-owned entry at *target*."""
     skill_md = target.path / skill.name / "SKILL.md"
     if not skill_md.is_file():
         return False
@@ -35,6 +41,7 @@ def is_deployed(target: Target, skill: Skill) -> bool:
 
 
 def discover_targets(search_root: Path | None = None) -> list[Target]:
+    """Return all known Deployment Targets whose parent directory exists."""
     root = search_root or Path.home()
     result = []
     for name, rel in _KNOWN:

@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from mysk.cli import app
 from mysk.commands import delete_skill as delete_cmd
+from mysk.io.targets import Target
 
 runner = CliRunner()
 
@@ -63,8 +64,6 @@ def test_confirmed_delete_removes_skill_from_library_and_unlinks_deployed_symlin
     target_skills.mkdir(parents=True)
     symlink = target_skills / "foo"
     symlink.symlink_to(skill_dir)
-
-    from mysk.io.targets import Target
 
     target = Target(name="agent", path=target_skills)
 
@@ -165,8 +164,6 @@ def test_foreign_symlink_in_target_is_left_untouched(monkeypatch, tmp_path):
     target_skills.mkdir(parents=True)
     symlink = target_skills / "foo"
     symlink.symlink_to(foreign_skill)
-
-    from mysk.io.targets import Target
 
     target = Target(name="agent", path=target_skills)
 

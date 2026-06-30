@@ -1,3 +1,5 @@
+"""Command to refresh an imported skill from its upstream source URL."""
+
 import shutil
 import tempfile
 from pathlib import Path
@@ -22,6 +24,7 @@ def refresh_skill(
     name: Annotated[
         str | None, typer.Argument(help="Name of the skill to refresh.")
     ] = None,
+    *,
     all_skills: Annotated[
         bool, typer.Option("--all", help="Refresh all imported skills.")
     ] = False,
@@ -39,7 +42,7 @@ def refresh_skill(
     if all_skills:
         _refresh_all(library)
     else:
-        _refresh_one(cast(str, name), library)
+        _refresh_one(cast("str", name), library)
 
 
 def _refresh_all(library: Path) -> None:
@@ -110,7 +113,7 @@ def _refresh_one(name: str, library: Path) -> None:
         )
         raise typer.Exit(1)
 
-    source = cast(str, skill.mysk.provenance.source)
+    source = cast("str", skill.mysk.provenance.source)
     try:
         import_url = ImportUrl.parse(source)
     except ValueError as exc:

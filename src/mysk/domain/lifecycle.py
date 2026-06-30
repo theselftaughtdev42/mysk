@@ -1,3 +1,5 @@
+"""LifecycleState enum: where a skill sits in its lifecycle."""
+
 import enum
 
 

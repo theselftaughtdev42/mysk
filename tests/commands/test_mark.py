@@ -43,13 +43,13 @@ def _run(
 
 def test_set_modified_writes_true_on_imported_skill(tmp_path):
     path = _skill(tmp_path, "foo", _IMPORTED_FM.format(name="foo", modified="false"))
-    mark.set_skill_modified(path, True)
+    mark.set_skill_modified(path, value=True)
     assert "modified: true" in path.read_text()
 
 
 def test_set_modified_writes_false_on_imported_skill(tmp_path):
     path = _skill(tmp_path, "foo", _IMPORTED_FM.format(name="foo", modified="true"))
-    mark.set_skill_modified(path, False)
+    mark.set_skill_modified(path, value=False)
     assert "modified: false" in path.read_text()
 
 
@@ -60,7 +60,7 @@ def test_set_modified_raises_for_self_authored_skill(tmp_path):
         "name: foo\ndescription: d\nmysk:\n  state: active\n",
     )
     with pytest.raises(ValueError, match="self-authored"):
-        mark.set_skill_modified(path, True)
+        mark.set_skill_modified(path, value=True)
 
 
 def test_set_lifecycle_updates_existing_mysk_block(tmp_path):

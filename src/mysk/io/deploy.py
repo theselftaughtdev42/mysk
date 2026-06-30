@@ -1,3 +1,5 @@
+"""Low-level deploy/undeploy operations: symlink reconciliation and removal."""
+
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +11,8 @@ RemoveOutcome = Literal["removed", "skipped"]
 
 @dataclass
 class ReconcileResult:
+    """Result of a single skill reconciliation attempt."""
+
     outcome: DeployOutcome
     reason: str | None = field(default=None)
 
@@ -16,9 +20,15 @@ class ReconcileResult:
 def reconcile_skill(
     source_dir: Path,
     target_path: Path,
+    *,
     overwrite: bool,
     skill_library_path: Path,
 ) -> ReconcileResult:
+    """Symlink *source_dir* at *target_path*, handling existing entries.
+
+    Returns a ReconcileResult describing what happened (deployed, overwritten,
+    or skipped) and an optional human-readable reason.
+    """
     if target_path.is_symlink():
         owned_by_mysk = target_path.resolve().is_relative_to(skill_library_path)
         if not owned_by_mysk and not overwrite:
@@ -50,11 +60,14 @@ def reconcile_skill(
 
 @dataclass
 class RemoveResult:
+    """Result of a single skill removal attempt."""
+
     outcome: RemoveOutcome
     reason: str | None = field(default=None)
 
 
 def remove_skill(target_path: Path, skill_library_path: Path) -> RemoveResult:
+    """Remove the symlink at *target_path* if it is owned by mysk."""
     if not target_path.exists() and not target_path.is_symlink():
         return RemoveResult(outcome="skipped", reason="not deployed")
 

@@ -1,15 +1,18 @@
-#!/usr/bin/env python3
+"""CLI for managing agent skills."""
+
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
+
+import typer
 
 ROOT = Path(__file__).parent
 SKILLS_DIR = ROOT / "skills"
 
 
 def default_skills_dir() -> Path:
+    """Return the default Claude skills directory (`~/.claude/skills`)."""
     return Path.home() / ".claude" / "skills"
 
 
@@ -36,6 +39,7 @@ def _is_experimental(skill: Path) -> bool:
 
 
 def available_skills() -> list[Path]:
+    """Return all skill directories sorted alphabetically."""
     return sorted(
         path
         for path in SKILLS_DIR.iterdir()
@@ -44,6 +48,7 @@ def available_skills() -> list[Path]:
 
 
 def list_skills(_: argparse.Namespace) -> int:
+    """Print available skills with deprecated/experimental suffixes."""
     for path in available_skills():
         if _is_deprecated(path):
             suffix = "  [deprecated]"
@@ -51,29 +56,30 @@ def list_skills(_: argparse.Namespace) -> int:
             suffix = "  [experimental]"
         else:
             suffix = ""
-        print(f"{path.name}{suffix}")
+        typer.echo(f"{path.name}{suffix}")
     return 0
 
 
 def deploy_skills(args: argparse.Namespace) -> int:
+    """Symlink all non-deprecated skills from SKILLS_DIR into *args.dest*."""
     dest = args.dest.expanduser()
     dest.mkdir(parents=True, exist_ok=True)
 
     for skill in available_skills():
         if _is_deprecated(skill):
-            print(f"Skipping deprecated skill: {skill.name}")
+            typer.echo(f"Skipping deprecated skill: {skill.name}")
             continue
 
         target = dest / skill.name
 
         if target.exists() or target.is_symlink():
             if not target.is_symlink():
-                print(f"Refusing to replace non-symlink: {target}", file=sys.stderr)
+                typer.echo(f"Refusing to replace non-symlink: {target}", err=True)
                 return 1
             target.unlink()
 
         target.symlink_to(skill.resolve(), target_is_directory=True)
-        print(f"Linked {skill.name} -> {target}")
+        typer.echo(f"Linked {skill.name} -> {target}")
 
     return 0
 
@@ -86,39 +92,42 @@ def _set_frontmatter_flag(skill: Path, flag: str) -> None:
 
 
 def experimental_skill(args: argparse.Namespace) -> int:
+    """Mark *args.name* as experimental in its SKILL.md frontmatter."""
     skill = SKILLS_DIR / args.name
     if not skill.is_dir() or not (skill / "SKILL.md").exists():
-        print(f"Unknown skill: {args.name}", file=sys.stderr)
+        typer.echo(f"Unknown skill: {args.name}", err=True)
         return 1
 
     if _is_experimental(skill):
-        print(f"{args.name} is already marked as experimental.")
+        typer.echo(f"{args.name} is already marked as experimental.")
         return 0
 
     _set_frontmatter_flag(skill, "experimental")
-    print(f"Marked {args.name} as experimental.")
+    typer.echo(f"Marked {args.name} as experimental.")
     return 0
 
 
 def deprecate_skill(args: argparse.Namespace) -> int:
+    """Mark *args.name* as deprecated in its SKILL.md frontmatter."""
     skill = SKILLS_DIR / args.name
     if not skill.is_dir() or not (skill / "SKILL.md").exists():
-        print(f"Unknown skill: {args.name}", file=sys.stderr)
+        typer.echo(f"Unknown skill: {args.name}", err=True)
         return 1
 
     if _is_deprecated(skill):
-        print(f"{args.name} is already deprecated.")
+        typer.echo(f"{args.name} is already deprecated.")
         return 0
 
     _set_frontmatter_flag(skill, "deprecated")
-    print(f"Marked {args.name} as deprecated.")
+    typer.echo(f"Marked {args.name} as deprecated.")
     return 0
 
 
 def cleanup_skills(args: argparse.Namespace) -> int:
+    """Remove deprecated skill symlinks from *args.dest*."""
     dest = args.dest.expanduser()
     if not dest.exists():
-        print(f"Destination does not exist: {dest}", file=sys.stderr)
+        typer.echo(f"Destination does not exist: {dest}", err=True)
         return 1
 
     deprecated = {skill.name for skill in available_skills() if _is_deprecated(skill)}
@@ -128,18 +137,19 @@ def cleanup_skills(args: argparse.Namespace) -> int:
         if target.name not in deprecated:
             continue
         if not target.is_symlink():
-            print(f"Refusing to remove non-symlink: {target}", file=sys.stderr)
+            typer.echo(f"Refusing to remove non-symlink: {target}", err=True)
             return 1
         target.unlink()
-        print(f"Removed deprecated skill: {target.name}")
+        typer.echo(f"Removed deprecated skill: {target.name}")
         removed += 1
 
     if removed == 0:
-        print("No deprecated skills to clean up.")
+        typer.echo("No deprecated skills to clean up.")
     return 0
 
 
 def main() -> int:
+    """Parse CLI arguments and dispatch to the appropriate command."""
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 

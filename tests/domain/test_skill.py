@@ -1,3 +1,4 @@
+import pydantic
 import pytest
 
 from mysk.domain import LifecycleState, MyskBlock, Provenance, Skill
@@ -138,13 +139,11 @@ def test_skill_without_mysk_key_is_unmigrated():
 
 
 def test_existing_mysk_block_without_state_is_rejected():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="missing required 'state' key"):
         Skill.from_frontmatter({"name": "foo", "description": "bar", "mysk": {}})
 
 
 def test_mysk_block_requires_state():
-    import pydantic
-
     with pytest.raises(pydantic.ValidationError):
         MyskBlock()  # type: ignore[call-arg]
 
@@ -179,7 +178,7 @@ def test_reads_imported_experimental_skill():
 
 
 def test_unknown_state_value_is_rejected():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'bogus' is not a valid LifecycleState"):
         Skill.from_frontmatter(
             {"name": "foo", "description": "bar", "mysk": {"state": "bogus"}}
         )
