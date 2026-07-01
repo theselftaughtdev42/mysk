@@ -110,23 +110,26 @@ def mark_skill(
 ) -> None:
     """Interactively set a marking on one or more skills."""
     skills_root = skill_library()
-    results = load_skills(skills_root)
+    installed, errors = load_skills(skills_root)
 
     if skill_name is not None and key is not None and value is not None:
-        match = next((r for r in results if r.path.parent.name == skill_name), None)
-        if match is None:
-            rprint(
-                f"[red]{escape(skill_name)} not found in the Skill Library.[/red]",
-                file=sys.stderr,
+        installed_match = next((r for r in installed if r.dir.name == skill_name), None)
+        if installed_match is None:
+            error_match = next(
+                (r for r in errors if r.path.parent.name == skill_name), None
             )
-            raise typer.Exit(1)
-        if match.schema_error is not None:
-            rprint(
-                f"[red]{escape(skill_name)} is not a valid skill"
-                f" — {match.schema_error}."
-                " Use mysk import to add skills to the library.[/red]",
-                file=sys.stderr,
-            )
+            if error_match is None:
+                rprint(
+                    f"[red]{escape(skill_name)} not found in the Skill Library.[/red]",
+                    file=sys.stderr,
+                )
+            else:
+                rprint(
+                    f"[red]{escape(skill_name)} is not a valid skill"
+                    f" — {error_match.schema_error}."
+                    " Use mysk import to add skills to the library.[/red]",
+                    file=sys.stderr,
+                )
             raise typer.Exit(1)
         if key not in _VALID_KEYS:
             rprint(f"[red]Unknown key: {escape(key)}[/red]", file=sys.stderr)
@@ -147,7 +150,7 @@ def mark_skill(
                 )
                 raise typer.Exit(1)
             resolved = lower == "true"
-        warning = _apply_marking(match.path, value=resolved)
+        warning = _apply_marking(installed_match.skill_md, value=resolved)
         if warning:
             rprint(warning, file=sys.stderr)
             raise typer.Exit(1)
@@ -158,13 +161,13 @@ def mark_skill(
         )
         return
 
-    migrated = [r.path for r in results if r.schema_error is None]
+    skill_mds = [r.skill_md for r in installed]
 
-    if not migrated:
+    if not skill_mds:
         rprint("[dim]No skills in the Skill Library to mark.[/dim]")
         raise typer.Exit(0)
 
-    selected = _prompt_for_skills(migrated)
+    selected = _prompt_for_skills(skill_mds)
     if not selected:
         raise typer.Exit(0)
     chosen_key = _prompt_for_key()

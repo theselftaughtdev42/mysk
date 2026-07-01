@@ -1,16 +1,11 @@
 """Command to remove deployed skills from selected Deployment Targets."""
 
-from typing import TYPE_CHECKING, cast
-
 import questionary
 import typer
 
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets, is_deployed
-
-if TYPE_CHECKING:
-    from mysk.domain.skill import Skill
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -62,13 +57,11 @@ def undeploy(
         raise typer.Exit(0)
 
     library = skill_library()
-    all_skills = load_skills(library)
-    deployable = [r for r in all_skills if r.skill and r.skill.mysk]
+    deployable, _ = load_skills(library)
     deployed = [
         r
         for r in deployable
-        if r.skill is not None
-        and any(is_deployed(t, r.skill, library) for t in selected_targets)
+        if any(is_deployed(t, r.skill, library) for t in selected_targets)
     ]
 
     if not deployed:
@@ -79,23 +72,18 @@ def undeploy(
         selected_skills = deployed
     elif skills is not None:
         names = {n.strip() for n in skills.split(",")}
-        known = {r.skill.name for r in deployable if r.skill is not None}
+        known = {r.skill.name for r in deployable}
         unknown = names - known
         if unknown:
             typer.echo(f"Unknown skill(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
-        selected_skills = [
-            r for r in deployable if r.skill is not None and r.skill.name in names
-        ]
+        selected_skills = [r for r in deployable if r.skill.name in names]
     else:
         selected_skills = questionary.checkbox(
             "Select skills to undeploy:\n",
             choices=[
-                questionary.Choice(
-                    f"{r.skill.name} ({r.skill.mysk.state.value})", value=r
-                )
+                questionary.Choice(f"{r.skill.name} ({r.mysk.state.value})", value=r)
                 for r in deployed
-                if r.skill is not None and r.skill.mysk is not None
             ],
         ).ask()
 
@@ -106,10 +94,9 @@ def undeploy(
     for target in selected_targets:
         typer.echo(f"\n{target.name}:")
         for skill_result in selected_skills:
-            skill = cast("Skill", skill_result.skill)
-            target_path = target.path / skill.name
+            target_path = target.path / skill_result.skill.name
             result = remove_skill(target_path, skill_library_path=library)
-            line = f"  {skill.name}: {result.outcome}"
+            line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
             typer.echo(line)

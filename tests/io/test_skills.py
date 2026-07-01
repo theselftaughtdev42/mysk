@@ -2,9 +2,11 @@ from pathlib import Path
 
 import pytest
 
+from mysk.domain import LifecycleState, MyskBlock, Skill
 from mysk.io import skills as skills_mod
 from mysk.io.skills import (
     CollisionError,
+    InstalledSkill,
     check_collision,
     load_skills,
     skill_library,
@@ -20,27 +22,33 @@ def _skill(root: Path, name: str, frontmatter_lines: str, body: str = "") -> Pat
     return path
 
 
-def test_empty_directory_returns_empty_list(tmp_path):
-    assert load_skills(tmp_path) == []
+def test_installed_skill_skill_md_is_dir_slash_skill_md(tmp_path):
+    mysk = MyskBlock(state=LifecycleState.ACTIVE)
+    skill = Skill(name="foo", description="d", mysk=mysk)
+    installed = InstalledSkill(skill=skill, mysk=mysk, dir=tmp_path / "foo")
+    assert installed.skill_md == tmp_path / "foo" / "SKILL.md"
+
+
+def test_empty_directory_returns_empty_tuple(tmp_path):
+    assert load_skills(tmp_path) == ([], [])
 
 
 def test_compliant_skill_is_loaded(tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
-    results = load_skills(tmp_path)
-    assert len(results) == 1
-    r = results[0]
-    assert r.skill is not None
-    assert r.skill.mysk is not None
-    assert r.schema_error is None
+    installed, errors = load_skills(tmp_path)
+    assert len(installed) == 1
+    assert errors == []
+    r = installed[0]
+    assert r.mysk is not None
+    assert r.dir == tmp_path / "foo"
 
 
 def test_manually_placed_skill_sets_schema_error(tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\n")
-    results = load_skills(tmp_path)
-    assert len(results) == 1
-    r = results[0]
-    assert r.schema_error == "missing mysk block"
-    assert r.skill is None
+    installed, errors = load_skills(tmp_path)
+    assert installed == []
+    assert len(errors) == 1
+    assert errors[0].schema_error == "missing mysk block"
 
 
 def test_malformed_block_sets_schema_error(tmp_path):
@@ -49,20 +57,28 @@ def test_malformed_block_sets_schema_error(tmp_path):
         "foo",
         "name: foo\ndescription: d\nmysk:\n  source: https://example.com\n",
     )
-    results = load_skills(tmp_path)
-    assert len(results) == 1
-    r = results[0]
-    assert r.schema_error is not None
-    assert r.skill is None
+    installed, errors = load_skills(tmp_path)
+    assert installed == []
+    assert len(errors) == 1
+    assert errors[0].schema_error is not None
 
 
-def test_results_are_sorted_alphabetically(tmp_path):
+def test_mixed_valid_and_invalid_skills_are_separated(tmp_path):
+    _skill(tmp_path, "good", "name: good\ndescription: d\nmysk:\n  state: active\n")
+    _skill(tmp_path, "bad", "name: bad\ndescription: d\n")
+    installed, errors = load_skills(tmp_path)
+    assert len(installed) == 1
+    assert installed[0].dir.name == "good"
+    assert len(errors) == 1
+    assert errors[0].path.parent.name == "bad"
+
+
+def test_installed_skills_are_sorted_alphabetically(tmp_path):
     _skill(tmp_path, "zebra", "name: zebra\ndescription: d\nmysk:\n  state: active\n")
     _skill(tmp_path, "alpha", "name: alpha\ndescription: d\nmysk:\n  state: active\n")
     _skill(tmp_path, "mango", "name: mango\ndescription: d\nmysk:\n  state: active\n")
-    results = load_skills(tmp_path)
-    names = [r.path.parent.name for r in results]
-    assert names == ["alpha", "mango", "zebra"]
+    installed, _ = load_skills(tmp_path)
+    assert [r.dir.name for r in installed] == ["alpha", "mango", "zebra"]
 
 
 def test_skill_library_path_defaults_to_platformdirs_data_dir(monkeypatch, tmp_path):
@@ -109,38 +125,25 @@ def test_skill_library_creates_directory_when_absent(monkeypatch, tmp_path):
 
 
 def test_imported_skill_carries_provenance(tmp_path):
-    frontmatter = (
+    fm = (
         "name: foo\ndescription: d\nmysk:\n  state: experimental\n  "
         "source: https://example.com\n  modified: false\n"
     )
-    _skill(
-        tmp_path,
-        "foo",
-        frontmatter,
-    )
-    results = load_skills(tmp_path)
-    r = results[0]
-    assert r.skill is not None
-    assert r.skill.mysk is not None
-    assert r.skill.mysk.provenance.is_imported
-    assert not r.skill.mysk.provenance.modified
+    _skill(tmp_path, "foo", fm)
+    installed, _ = load_skills(tmp_path)
+    r = installed[0]
+    assert r.mysk.provenance.is_imported
+    assert not r.mysk.provenance.modified
 
 
 def test_modified_imported_skill_carries_modified_flag(tmp_path):
-    frontmatter = (
+    fm = (
         "name: foo\ndescription: d\nmysk:\n  state: active\n  "
         "source: https://example.com\n  modified: true\n"
     )
-    _skill(
-        tmp_path,
-        "foo",
-        frontmatter,
-    )
-    results = load_skills(tmp_path)
-    r = results[0]
-    assert r.skill is not None
-    assert r.skill.mysk is not None
-    assert r.skill.mysk.provenance.modified
+    _skill(tmp_path, "foo", fm)
+    installed, _ = load_skills(tmp_path)
+    assert installed[0].mysk.provenance.modified
 
 
 _SOURCE_A = "https://github.com/alice/repo"

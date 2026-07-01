@@ -1,7 +1,6 @@
 """Command to deploy skills to selected Deployment Targets."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 
 import questionary
 import typer
@@ -9,9 +8,6 @@ import typer
 from mysk.io.deploy import reconcile_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
-
-if TYPE_CHECKING:
-    from mysk.domain.skill import Skill
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -77,8 +73,7 @@ def deploy(
         raise typer.Exit(0)
 
     library = skill_library()
-    all_skills = load_skills(library)
-    deployable = [r for r in all_skills if r.skill and r.skill.mysk]
+    deployable, _ = load_skills(library)
 
     if not deployable:
         typer.echo("No skills in the Skill Library to deploy.")
@@ -88,23 +83,18 @@ def deploy(
         selected_skills = deployable
     elif skills is not None:
         names = {n.strip() for n in skills.split(",")}
-        known = {r.skill.name for r in deployable if r.skill is not None}
+        known = {r.skill.name for r in deployable}
         unknown = names - known
         if unknown:
             typer.echo(f"Unknown skill(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
-        selected_skills = [
-            r for r in deployable if r.skill is not None and r.skill.name in names
-        ]
+        selected_skills = [r for r in deployable if r.skill.name in names]
     else:
         selected_skills = questionary.checkbox(
             "Select skills to deploy:\n",
             choices=[
-                questionary.Choice(
-                    f"{r.skill.name} ({r.skill.mysk.state.value})", value=r
-                )
+                questionary.Choice(f"{r.skill.name} ({r.mysk.state.value})", value=r)
                 for r in deployable
-                if r.skill is not None and r.skill.mysk is not None
             ],
         ).ask()
 
@@ -118,16 +108,14 @@ def deploy(
         if created:
             typer.echo(f"  Created {created}")
         for skill_result in selected_skills:
-            skill = cast("Skill", skill_result.skill)
-            source_dir = skill_result.path.parent
-            target_path = target.path / skill.name
+            target_path = target.path / skill_result.skill.name
             result = reconcile_skill(
-                source_dir,
+                skill_result.dir,
                 target_path,
                 overwrite=overwrite,
                 skill_library_path=library,
             )
-            line = f"  {skill.name}: {result.outcome}"
+            line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
             typer.echo(line)

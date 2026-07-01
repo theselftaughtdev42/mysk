@@ -46,43 +46,24 @@ def refresh_skill(
 
 
 def _refresh_all(library: Path) -> None:
-    results = load_skills(library)
+    installed, _ = load_skills(library)
 
-    imported = [
-        r
-        for r in results
-        if r.skill is not None
-        and r.skill.mysk is not None
-        and r.skill.mysk.provenance.is_imported
-    ]
+    imported = [r for r in installed if r.mysk.provenance.is_imported]
 
     if not imported:
         rprint("No imported skills found in the Skill Library.")
         return
 
-    refreshable = [
-        r
-        for r in imported
-        if r.skill is not None
-        and r.skill.mysk is not None
-        and not r.skill.mysk.provenance.modified
-    ]
-    needs_review = [
-        r
-        for r in imported
-        if r.skill is not None
-        and r.skill.mysk is not None
-        and r.skill.mysk.provenance.modified
-    ]
+    refreshable = [r for r in imported if not r.mysk.provenance.modified]
+    needs_review = [r for r in imported if r.mysk.provenance.modified]
 
     for result in refreshable:
-        skill_name = result.path.parent.name
-        _refresh_one(skill_name, library)
+        _refresh_one(result.dir.name, library)
 
     if needs_review:
         rprint("\n[bold yellow]Needs review[/bold yellow] (modified: true — skipped):")
         for result in needs_review:
-            rprint(f"  {result.path.parent.name}")
+            rprint(f"  {result.dir.name}")
 
 
 def _refresh_one(name: str, library: Path) -> None:

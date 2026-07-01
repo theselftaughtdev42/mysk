@@ -20,7 +20,7 @@ _HIGHLIGHTED = {LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL}
 def list_skills() -> None:
     """List all skills and where they are deployed."""
     library = skill_library()
-    skills = load_skills(library)
+    installed, errors = load_skills(library)
     targets = discover_targets()
 
     console = Console()
@@ -30,48 +30,44 @@ def list_skills() -> None:
     table.add_column("Provenance")
     table.add_column("Deployed To")
 
-    for r in skills:
-        name = r.skill.name if r.skill else r.path.parent.name
-
-        if r.skill is not None and r.skill.mysk is not None:
-            state = r.skill.mysk.state
-            prov = r.skill.mysk.provenance
-            if prov.is_imported:
-                provenance_label = (
-                    "imported ⚠ modified" if prov.modified else "imported"
-                )
-            else:
-                provenance_label = "self-authored"
-            deployed_to = [t for t in targets if is_deployed(t, r.skill, library)]
-            deployed_label = "\n".join(t.label() for t in deployed_to) or "—"
-            if state in _HIGHLIGHTED and deployed_to:
-                table.add_row(
-                    f"[bold]{name}[/bold]",
-                    state.value,
-                    provenance_label,
-                    deployed_label,
-                )
-            else:
-                table.add_row(
-                    f"[dim]{name}[/dim]",
-                    f"[dim]{state.value}[/dim]",
-                    f"[dim]{provenance_label}[/dim]",
-                    f"[dim]{deployed_label}[/dim]",
-                    style="dim",
-                )
-        else:
-            status_label = (
-                "no mysk block"
-                if r.schema_error == "missing mysk block"
-                else "malformed"
-            )
+    for r in installed:
+        state = r.mysk.state
+        prov = r.mysk.provenance
+        provenance_label = (
+            ("imported ⚠ modified" if prov.modified else "imported")
+            if prov.is_imported
+            else "self-authored"
+        )
+        deployed_to = [t for t in targets if is_deployed(t, r.skill, library)]
+        deployed_label = "\n".join(t.label() for t in deployed_to) or "—"
+        if state in _HIGHLIGHTED and deployed_to:
             table.add_row(
-                f"[dim]{name}[/dim]",
-                f"[dim]{status_label}[/dim]",
-                "[dim]—[/dim]",
-                "[dim]—[/dim]",
+                f"[bold]{r.skill.name}[/bold]",
+                state.value,
+                provenance_label,
+                deployed_label,
+            )
+        else:
+            table.add_row(
+                f"[dim]{r.skill.name}[/dim]",
+                f"[dim]{state.value}[/dim]",
+                f"[dim]{provenance_label}[/dim]",
+                f"[dim]{deployed_label}[/dim]",
                 style="dim",
             )
+
+    for r in errors:
+        name = r.path.parent.name
+        status_label = (
+            "no mysk block" if r.schema_error == "missing mysk block" else "malformed"
+        )
+        table.add_row(
+            f"[dim]{name}[/dim]",
+            f"[dim]{status_label}[/dim]",
+            "[dim]—[/dim]",
+            "[dim]—[/dim]",
+            style="dim",
+        )
 
     console.print(table)
 
