@@ -7,7 +7,7 @@ from mysk.cli import app
 from mysk.commands import deploy as deploy_cmd
 from mysk.domain import LifecycleState, MyskBlock, Skill
 from mysk.io.deploy import ReconcileResult
-from mysk.io.skills import SkillLoadResult
+from mysk.io.skills import InstalledSkill
 from mysk.io.targets import Target
 
 runner = CliRunner()
@@ -15,29 +15,24 @@ runner = CliRunner()
 _CLAUDE_TARGET = Target(name="claude", path=Path("/home/user/.claude/skills"))
 _CURSOR_TARGET = Target(name="cursor", path=Path("/home/user/.cursor/skills"))
 
-_ACTIVE_SKILL = SkillLoadResult(
-    path=Path("/fake/skills/foo/SKILL.md"),
-    skill=Skill(
-        name="foo", description="d", mysk=MyskBlock(state=LifecycleState.ACTIVE)
-    ),
-    schema_error=None,
-    is_unmigrated=False,
+_ACTIVE = MyskBlock(state=LifecycleState.ACTIVE)
+_EXPERIMENTAL = MyskBlock(state=LifecycleState.EXPERIMENTAL)
+_DEPRECATED = MyskBlock(state=LifecycleState.DEPRECATED)
+
+_ACTIVE_SKILL = InstalledSkill(
+    skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+    mysk=_ACTIVE,
+    dir=Path("/fake/skills/foo"),
 )
-_EXPERIMENTAL_SKILL = SkillLoadResult(
-    path=Path("/fake/skills/bar/SKILL.md"),
-    skill=Skill(
-        name="bar", description="d", mysk=MyskBlock(state=LifecycleState.EXPERIMENTAL)
-    ),
-    schema_error=None,
-    is_unmigrated=False,
+_EXPERIMENTAL_SKILL = InstalledSkill(
+    skill=Skill(name="bar", description="d", mysk=_EXPERIMENTAL),
+    mysk=_EXPERIMENTAL,
+    dir=Path("/fake/skills/bar"),
 )
-_DEPRECATED_SKILL = SkillLoadResult(
-    path=Path("/fake/skills/wip/SKILL.md"),
-    skill=Skill(
-        name="wip", description="d", mysk=MyskBlock(state=LifecycleState.DEPRECATED)
-    ),
-    schema_error=None,
-    is_unmigrated=False,
+_DEPRECATED_SKILL = InstalledSkill(
+    skill=Skill(name="wip", description="d", mysk=_DEPRECATED),
+    mysk=_DEPRECATED,
+    dir=Path("/fake/skills/wip"),
 )
 
 
@@ -66,7 +61,7 @@ def _run(
 ):
     monkeypatch.setattr(deploy_cmd, "skill_library", lambda: Path("/fake/skills"))
     monkeypatch.setattr(deploy_cmd, "discover_targets", lambda: list(targets))
-    monkeypatch.setattr(deploy_cmd, "load_skills", lambda _: list(skills))
+    monkeypatch.setattr(deploy_cmd, "load_skills", lambda _: (list(skills), []))
     if suppress_ensure_dir:
         monkeypatch.setattr(deploy_cmd, "_ensure_target_dir", lambda path: None)
     if questionary_stub is not None:

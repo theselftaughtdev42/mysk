@@ -1,13 +1,36 @@
 """Skill Library filesystem access: loading, collision checking, path resolution."""
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from platformdirs import user_data_dir
-from pydantic import BaseModel, ConfigDict
 
+from mysk.domain.mysk_block import MyskBlock
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
+
+
+@dataclass(frozen=True)
+class InstalledSkill:
+    """A valid, mysk-owned skill installed at a known directory in the Skill Library."""
+
+    skill: Skill
+    mysk: MyskBlock
+    dir: Path
+
+    @property
+    def skill_md(self) -> Path:
+        """Path to this skill's SKILL.md entry point."""
+        return self.dir / "SKILL.md"
+
+
+@dataclass(frozen=True)
+class SkillLoadError:
+    """A SKILL.md that could not be loaded due to a missing or malformed mysk block."""
+
+    path: Path
+    schema_error: str
 
 
 def skill_library_path() -> Path:
@@ -33,43 +56,28 @@ def skill_library() -> Path:
     return library
 
 
-class SkillLoadResult(BaseModel):
-    """Result of loading a single SKILL.md: the parsed skill or a schema error."""
-
-    model_config = ConfigDict(frozen=True)
-
-    path: Path
-    skill: Skill | None
-    schema_error: str | None
-
-
-def load_skills(skills_root: Path) -> list[SkillLoadResult]:
+def load_skills(
+    skills_root: Path,
+) -> tuple[list[InstalledSkill], list[SkillLoadError]]:
     """Load every skill under `skills_root`, sorted alphabetically by name.
 
-    Each result carries the parsed `Skill` when the frontmatter is valid, or a
-    `schema_error` string when the mysk block is absent or malformed.
+    Returns a tuple of (installed, errors). Installed skills are valid and
+    mysk-owned; errors carry the schema_error string for investigation.
     """
-    results = []
+    installed: list[InstalledSkill] = []
+    errors: list[SkillLoadError] = []
     for path in sorted(skills_root.glob("*/SKILL.md")):
         data, _ = frontmatter.read(path.read_text())
         try:
             skill = Skill.from_frontmatter(data)
         except (ValueError, KeyError) as exc:
-            results.append(
-                SkillLoadResult(path=path, skill=None, schema_error=str(exc))
-            )
+            errors.append(SkillLoadError(path=path, schema_error=str(exc)))
             continue
         if skill.mysk is None:
-            results.append(
-                SkillLoadResult(
-                    path=path,
-                    skill=None,
-                    schema_error="missing mysk block",
-                )
-            )
+            errors.append(SkillLoadError(path=path, schema_error="missing mysk block"))
             continue
-        results.append(SkillLoadResult(path=path, skill=skill, schema_error=None))
-    return results
+        installed.append(InstalledSkill(skill=skill, mysk=skill.mysk, dir=path.parent))
+    return installed, errors
 
 
 class CollisionError(Exception):
