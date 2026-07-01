@@ -12,6 +12,18 @@ _Avoid_: plugin, module, script
 The CLI tool and package name for this project. Manages the skill lifecycle: import, list, deploy, refresh, mark, and deprecate.
 _Avoid_: skills.py, the tool, the script
 
+**Skill Operations**:
+Collective term for the commands that act on one or more skills already in the Skill Library, identified by name: `deploy`, `undeploy`, `cleanup`, `delete`, `mark`, and `refresh`. They share a common interactive-picker/flag interface, following the Skill Operation Pathway — see ADR-0008. Excludes `import` (brings a new skill in, not identified by an existing name) and `list`/`library` (read-only).
+_Avoid_: skill management commands, skill commands
+
+**Skill Operation Pathway**:
+The shared flow every Skill Operation follows: resolve a Skill Selection via `<skill>`, `--bulk`, or `--all` — or, when none is given, an interactive picker over eligible skills — then, only if the action is destructive, a confirmation gate skippable with `--yes`, then the act itself. See ADR-0008 and `docs/diagrams/skill-operations-pathway.md`.
+_Avoid_: pattern, spine, flow
+
+**Skill Selection**:
+The set of skills a Skill Operation resolves to act on, via `<skill>`, `--bulk`, `--all`, or the interactive picker. Distinct from Deployment Target, which is *where* an operation acts, not *what* it acts on.
+_Avoid_: target, scope
+
 **Skill Library**:
 The canonical local directory where all skills are stored, located at `platformdirs.user_data_dir("mysk") / "skills"`. Overridable via the `MYSK_SKILLS_DIR` environment variable. All mysk commands read from and write to the Skill Library; it is independent of any source repository. See ADR-0005.
 _Avoid_: skills directory, skills folder, source repo
