@@ -1,42 +1,73 @@
 """Command to remove deployed skills from selected Deployment Targets."""
 
+from collections.abc import Sequence
+from pathlib import Path
+
 import questionary
 import typer
 
 from mysk.io.deploy import remove_skill
-from mysk.io.skills import load_skills, skill_library
-from mysk.io.targets import discover_targets, is_deployed
+from mysk.io.skills import InstalledSkill, load_skills, skill_library
+from mysk.io.targets import Target, discover_targets, is_deployed
+from mysk.skill_operation_pathway import (
+    SkillSelectionError,
+    build_skill_choices,
+    resolve_skill_selection,
+)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
 )
 
 
+def _not_deployed(
+    result: InstalledSkill,
+    targets: Sequence[Target],
+    library: Path,
+) -> str | None:
+    if any(is_deployed(t, result.skill, library) for t in targets):
+        return None
+    return "not deployed"
+
+
 @app.callback()
 def undeploy(
+    skill: str | None = typer.Argument(
+        None, help="Name of a single skill to undeploy."
+    ),
+    *,
     agents: str | None = typer.Option(
         None,
         "--agents",
         help="Comma-separated agent names to target; skips the target prompt.",
     ),
-    skills: str | None = typer.Option(
+    bulk: str | None = typer.Option(
         None,
-        "--skills",
+        "--bulk",
         help="Comma-separated skill names to undeploy; skips the skill prompt.",
     ),
-    *,
-    skills_all: bool = typer.Option(
+    select_all: bool = typer.Option(
         False,
-        "--skills-all",
-        help="Undeploy every deployed skill without prompting; skips the skill prompt.",
+        "--all",
+        help="Undeploy every skill without prompting; skips the skill prompt.",
     ),
 ) -> None:
     """Remove deployed skills from selected Deployment Targets."""
-    if skills_all and skills is not None:
-        typer.echo("Cannot combine --skills-all with --skills.")
-        raise typer.Exit(1)
-
     targets = discover_targets()
+
+    library = skill_library()
+    deployable, _ = load_skills(library)
+
+    try:
+        selected_skills = resolve_skill_selection(
+            skill=skill,
+            bulk=bulk,
+            select_all=select_all,
+            eligible=deployable,
+        )
+    except SkillSelectionError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(1) from None
 
     if agents is not None:
         names = {n.strip() for n in agents.split(",")}
@@ -56,35 +87,17 @@ def undeploy(
         typer.echo("Nothing selected.")
         raise typer.Exit(0)
 
-    library = skill_library()
-    deployable, _ = load_skills(library)
-    deployed = [
-        r
-        for r in deployable
-        if any(is_deployed(t, r.skill, library) for t in selected_targets)
-    ]
-
-    if not deployed:
-        typer.echo("No skills deployed to the selected targets.")
-        raise typer.Exit(0)
-
-    if skills_all:
-        selected_skills = deployed
-    elif skills is not None:
-        names = {n.strip() for n in skills.split(",")}
-        known = {r.skill.name for r in deployable}
-        unknown = names - known
-        if unknown:
-            typer.echo(f"Unknown skill(s): {', '.join(sorted(unknown))}")
-            raise typer.Exit(1)
-        selected_skills = [r for r in deployable if r.skill.name in names]
-    else:
+    if selected_skills is None:
+        skill_choices = build_skill_choices(
+            deployable,
+            relevance=lambda r: _not_deployed(r, selected_targets, library),
+        )
+        if all(choice.disabled for choice in skill_choices):
+            typer.echo("No skills deployed to the selected targets.")
+            raise typer.Exit(0)
         selected_skills = questionary.checkbox(
             "Select skills to undeploy:\n",
-            choices=[
-                questionary.Choice(f"{r.skill.name} ({r.mysk.state.value})", value=r)
-                for r in deployed
-            ],
+            choices=skill_choices,
         ).ask()
 
     if not selected_skills:
