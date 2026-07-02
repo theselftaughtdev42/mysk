@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Annotated, cast
 
+import questionary
 import typer
 from rich import print as rprint
 
@@ -12,11 +13,25 @@ from mysk.domain.import_url import ImportUrl
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
 from mysk.io.github import DownloadError, download_skill
-from mysk.io.skills import load_skills, skill_library
+from mysk.io.skills import InstalledSkill, load_skills, skill_library
+from mysk.skill_operation_pathway import (
+    SkillSelectionError,
+    build_skill_choices,
+    confirm,
+    resolve_skill_selection,
+)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
 )
+
+
+def _refresh_relevance(result: InstalledSkill) -> str | None:
+    if not result.mysk.provenance.is_imported:
+        return "self-authored — nothing to refresh"
+    if result.mysk.provenance.modified:
+        return "modified — needs review before refresh"
+    return None
 
 
 @app.callback()
@@ -25,40 +40,56 @@ def refresh_skill(
         str | None, typer.Argument(help="Name of the skill to refresh.")
     ] = None,
     *,
+    bulk: Annotated[
+        str | None,
+        typer.Option(
+            "--bulk", help="Comma-separated skill names to refresh; skips the picker."
+        ),
+    ] = None,
     all_skills: Annotated[
         bool, typer.Option("--all", help="Refresh all imported skills.")
     ] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", help="Skip confirmation prompt.")
+    ] = False,
 ) -> None:
     """Refresh an imported skill from its upstream source URL."""
-    if name and all_skills:
-        rprint("[red]Error:[/red] Cannot specify both a skill name and --all.")
-        raise typer.Exit(1)
-    if not name and not all_skills:
-        rprint("[red]Error:[/red] Provide a skill name or --all.")
-        raise typer.Exit(1)
-
     library = skill_library()
-
-    if all_skills:
-        _refresh_all(library)
-    else:
-        _refresh_one(cast("str", name), library)
-
-
-def _refresh_all(library: Path) -> None:
     installed, _ = load_skills(library)
-
     imported = [r for r in installed if r.mysk.provenance.is_imported]
 
-    if not imported:
+    try:
+        selected = resolve_skill_selection(
+            skill=name, bulk=bulk, select_all=all_skills, eligible=imported
+        )
+    except SkillSelectionError as exc:
+        if name is None or bulk is not None or all_skills:
+            rprint(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(1) from None
+        selected = None
+
+    if name is not None:
+        _refresh_one(name, library, yes=yes)
+        return
+
+    if selected is None:
+        choices = build_skill_choices(installed, relevance=_refresh_relevance)
+        selected = questionary.checkbox(
+            "Select skills to refresh:\n", choices=choices
+        ).ask()
+        if not selected:
+            rprint("Nothing selected.")
+            raise typer.Exit(0)
+
+    refreshable = [r for r in selected if not r.mysk.provenance.modified]
+    needs_review = [r for r in selected if r.mysk.provenance.modified]
+
+    if not refreshable and not needs_review:
         rprint("No imported skills found in the Skill Library.")
         return
 
-    refreshable = [r for r in imported if not r.mysk.provenance.modified]
-    needs_review = [r for r in imported if r.mysk.provenance.modified]
-
     for result in refreshable:
-        _refresh_one(result.dir.name, library)
+        _refresh_one(result.dir.name, library, yes=yes)
 
     if needs_review:
         rprint("\n[bold yellow]Needs review[/bold yellow] (modified: true — skipped):")
@@ -66,7 +97,7 @@ def _refresh_all(library: Path) -> None:
             rprint(f"  {result.dir.name}")
 
 
-def _refresh_one(name: str, library: Path) -> None:
+def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     skill_md_path = library / name / "SKILL.md"
 
     if not skill_md_path.exists():
@@ -135,6 +166,12 @@ def _refresh_one(name: str, library: Path) -> None:
 
         if _dirs_are_identical(local_dir, tmp_skill_dir):
             rprint(f"No changes — {name!r} is already up to date.")
+            return
+
+        if not confirm(
+            f"Refresh {name!r}? This will overwrite its local content.", yes=yes
+        ):
+            rprint(f"Aborted refresh of {name!r}.")
             return
 
         shutil.rmtree(local_dir)
