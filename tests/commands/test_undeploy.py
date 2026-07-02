@@ -72,35 +72,40 @@ def _make_questionary(target_answer, skill_answer=None):
     )
 
 
-def test_only_deployed_skills_offered_in_skill_prompt(monkeypatch):
+def _capture_skill_choices(monkeypatch, *, targets, skills, is_deployed_fn=None):
     captured_choices = {}
-    answers = iter([[_CLAUDE_TARGET], []])
+    answers = iter([targets, []])
 
     def checkbox(message, choices):
         captured_choices[message] = choices
         return SimpleNamespace(ask=lambda: next(answers))
 
-    stub = SimpleNamespace(
-        checkbox=checkbox, Choice=lambda title, value=None: (title, value)
-    )
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
 
     _run(
         monkeypatch,
+        targets=targets,
+        skills=skills,
+        questionary_stub=stub,
+        is_deployed_fn=is_deployed_fn,
+    )
+
+    skill_choices = next(
+        choices for msg, choices in captured_choices.items() if "skill" in msg.lower()
+    )
+    return {choice.value.skill.name: choice.disabled for choice in skill_choices}
+
+
+def test_not_deployed_skill_disabled_with_reason_in_picker(monkeypatch):
+    disabled = _capture_skill_choices(
+        monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
-        questionary_stub=stub,
         is_deployed_fn=lambda t, s, lib: s.name == "foo",
     )
 
-    skill_choices = [
-        choice
-        for msg, choices in captured_choices.items()
-        if "skill" in msg.lower()
-        for choice in choices
-    ]
-    titles = [title for title, _ in skill_choices]
-    assert any("foo" in t for t in titles)
-    assert not any("bar" in t for t in titles)
+    assert disabled["foo"] is None
+    assert disabled["bar"] == "not deployed"
 
 
 def test_no_deployed_skills_in_selected_targets_exits_cleanly(monkeypatch):
@@ -158,35 +163,7 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
     assert "cursor" not in result.output
 
 
-def test_skills_flag_removes_named_skills_without_showing_skill_prompt(monkeypatch):
-    prompted = []
-
-    def checkbox(message, choices):
-        prompted.append(message)
-        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
-    removed = []
-
-    def remove(target_path, skill_library_path):
-        removed.append(target_path.name)
-        return RemoveResult(outcome="removed")
-
-    result = _run(
-        monkeypatch,
-        targets=[_CLAUDE_TARGET],
-        skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
-        questionary_stub=stub,
-        remove_fn=remove,
-        extra_args=["--skills", "foo"],
-    )
-
-    assert result.exit_code == 0
-    assert not any("skill" in m.lower() for m in prompted)
-    assert removed == ["foo"]
-
-
-def test_skills_all_flag_removes_every_deployed_skill_without_showing_skill_prompt(
+def test_skill_positional_removes_named_skill_without_showing_skill_prompt(
     monkeypatch,
 ):
     prompted = []
@@ -208,7 +185,65 @@ def test_skills_all_flag_removes_every_deployed_skill_without_showing_skill_prom
         skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
         questionary_stub=stub,
         remove_fn=remove,
-        extra_args=["--skills-all"],
+        extra_args=["foo"],
+    )
+
+    assert result.exit_code == 0
+    assert not any("skill" in m.lower() for m in prompted)
+    assert removed == ["foo"]
+
+
+def test_bulk_flag_removes_named_skills_without_showing_skill_prompt(monkeypatch):
+    prompted = []
+
+    def checkbox(message, choices):
+        prompted.append(message)
+        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    removed = []
+
+    def remove(target_path, skill_library_path):
+        removed.append(target_path.name)
+        return RemoveResult(outcome="removed")
+
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
+        questionary_stub=stub,
+        remove_fn=remove,
+        extra_args=["--bulk", "foo"],
+    )
+
+    assert result.exit_code == 0
+    assert not any("skill" in m.lower() for m in prompted)
+    assert removed == ["foo"]
+
+
+def test_all_flag_removes_every_deployable_skill_without_showing_skill_prompt(
+    monkeypatch,
+):
+    prompted = []
+
+    def checkbox(message, choices):
+        prompted.append(message)
+        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    removed = []
+
+    def remove(target_path, skill_library_path):
+        removed.append(target_path.name)
+        return RemoveResult(outcome="removed")
+
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
+        questionary_stub=stub,
+        remove_fn=remove,
+        extra_args=["--all"],
     )
 
     assert result.exit_code == 0
@@ -216,16 +251,16 @@ def test_skills_all_flag_removes_every_deployed_skill_without_showing_skill_prom
     assert sorted(removed) == ["bar", "foo"]
 
 
-def test_skills_all_and_skills_flags_together_exit_with_error(monkeypatch):
+def test_all_and_bulk_flags_together_exit_with_error(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        extra_args=["--skills-all", "--skills", "foo"],
+        extra_args=["--all", "--bulk", "foo"],
     )
 
     assert result.exit_code == 1
-    assert "Cannot combine --skills-all with --skills" in result.output
+    assert "mutually exclusive" in result.output
 
 
 def test_unknown_agent_name_in_agents_flag_exits_with_error(monkeypatch):
@@ -240,13 +275,13 @@ def test_unknown_agent_name_in_agents_flag_exits_with_error(monkeypatch):
     assert "nonexistent" in result.output
 
 
-def test_unknown_skill_name_in_skills_flag_exits_with_error(monkeypatch):
+def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=_make_questionary(target_answer=[_CLAUDE_TARGET]),
-        extra_args=["--skills", "foo,ghost"],
+        extra_args=["--bulk", "foo,ghost"],
     )
 
     assert result.exit_code == 1
