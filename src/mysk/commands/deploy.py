@@ -106,12 +106,16 @@ def deploy(
         raise typer.Exit(0)
 
     if selected_skills is None:
+        skill_choices = build_skill_choices(
+            deployable,
+            relevance=lambda r: _already_deployed(r, selected_targets),
+        )
+        if all(choice.disabled for choice in skill_choices):
+            typer.echo("All skills already deployed to selected target(s).")
+            raise typer.Exit(0)
         selected_skills = questionary.checkbox(
             "Select skills to deploy:\n",
-            choices=build_skill_choices(
-                deployable,
-                relevance=lambda r: _already_deployed(r, selected_targets),
-            ),
+            choices=skill_choices,
         ).ask()
 
     if not selected_skills:

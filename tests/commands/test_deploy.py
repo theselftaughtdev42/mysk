@@ -295,14 +295,27 @@ def test_skill_cleanly_deployed_to_every_selected_target_is_disabled_in_picker(
         mysk=_ACTIVE,
         dir=source,
     )
+    # A second, undeployed skill keeps at least one choice selectable, so the
+    # picker is still shown instead of being skipped by the all-deployed
+    # short-circuit.
+    other_source = library / "bar"
+    other_source.mkdir()
+    other_skill = InstalledSkill(
+        skill=Skill(name="bar", description="d", mysk=_EXPERIMENTAL),
+        mysk=_EXPERIMENTAL,
+        dir=other_source,
+    )
     target_dir = tmp_path / "targets"
     target_dir.mkdir()
     target = Target(name="claude", path=target_dir)
     (target_dir / "foo").symlink_to(source)
 
-    disabled = _capture_skill_choices(monkeypatch, targets=[target], skills=[skill])
+    disabled = _capture_skill_choices(
+        monkeypatch, targets=[target], skills=[skill, other_skill]
+    )
 
     assert disabled["foo"] == "already deployed"
+    assert disabled["bar"] is None
 
 
 def test_skill_with_foreign_symlink_collision_stays_selectable_in_picker(
@@ -397,6 +410,43 @@ def test_skill_deployed_to_only_one_of_two_selected_targets_stays_selectable(
     )
 
     assert disabled["foo"] is None
+
+
+def test_all_skills_already_deployed_to_selected_target_skips_picker_and_exits_cleanly(
+    monkeypatch, tmp_path
+):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").symlink_to(source)
+
+    prompted = []
+
+    def checkbox(message, choices):
+        prompted.append(message)
+        return SimpleNamespace(ask=lambda: [target])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[skill],
+        questionary_stub=stub,
+    )
+
+    assert result.exit_code == 0
+    assert not any("skill" in m.lower() for m in prompted)
+    assert "already deployed" in result.output.lower()
 
 
 def test_summary_printed_per_target_with_outcomes(monkeypatch):
