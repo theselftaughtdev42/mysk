@@ -109,7 +109,7 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
     assert "cursor" not in result.output
 
 
-def test_skills_flag_deploys_named_skills_without_showing_skill_prompt(monkeypatch):
+def test_bulk_flag_deploys_named_skills_without_showing_skill_prompt(monkeypatch):
     prompted = []
 
     def checkbox(message, choices):
@@ -129,7 +129,7 @@ def test_skills_flag_deploys_named_skills_without_showing_skill_prompt(monkeypat
         skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
         questionary_stub=stub,
         reconcile_fn=reconcile,
-        extra_args=["--skills", "foo"],
+        extra_args=["--bulk", "foo"],
     )
 
     assert result.exit_code == 0
@@ -137,7 +137,7 @@ def test_skills_flag_deploys_named_skills_without_showing_skill_prompt(monkeypat
     assert deployed == ["foo"]
 
 
-def test_skills_all_flag_deploys_every_deployable_skill_without_showing_skill_prompt(
+def test_skill_positional_deploys_named_skill_without_showing_skill_prompt(
     monkeypatch,
 ):
     prompted = []
@@ -159,7 +159,37 @@ def test_skills_all_flag_deploys_every_deployable_skill_without_showing_skill_pr
         skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
         questionary_stub=stub,
         reconcile_fn=reconcile,
-        extra_args=["--skills-all"],
+        extra_args=["foo"],
+    )
+
+    assert result.exit_code == 0
+    assert not any("skill" in m.lower() for m in prompted)
+    assert deployed == ["foo"]
+
+
+def test_all_flag_deploys_every_deployable_skill_without_showing_skill_prompt(
+    monkeypatch,
+):
+    prompted = []
+
+    def checkbox(message, choices):
+        prompted.append(message)
+        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    deployed = []
+
+    def reconcile(source_dir, target_path, overwrite, skill_library_path):
+        deployed.append(target_path.name)
+        return ReconcileResult(outcome="deployed")
+
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
+        questionary_stub=stub,
+        reconcile_fn=reconcile,
+        extra_args=["--all"],
     )
 
     assert result.exit_code == 0
@@ -167,16 +197,16 @@ def test_skills_all_flag_deploys_every_deployable_skill_without_showing_skill_pr
     assert sorted(deployed) == ["bar", "foo"]
 
 
-def test_skills_all_and_skills_flags_together_exit_with_error(monkeypatch):
+def test_all_and_bulk_flags_together_exit_with_error(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        extra_args=["--skills-all", "--skills", "foo"],
+        extra_args=["--all", "--bulk", "foo"],
     )
 
     assert result.exit_code == 1
-    assert "Cannot combine --skills-all with --skills" in result.output
+    assert "mutually exclusive" in result.output
 
 
 def test_unknown_agent_name_in_agents_flag_exits_with_error(monkeypatch):
@@ -191,13 +221,13 @@ def test_unknown_agent_name_in_agents_flag_exits_with_error(monkeypatch):
     assert "nonexistent" in result.output
 
 
-def test_unknown_skill_name_in_skills_flag_exits_with_error(monkeypatch):
+def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=_make_questionary(target_answer=[_CLAUDE_TARGET]),
-        extra_args=["--skills", "foo,ghost"],
+        extra_args=["--bulk", "foo,ghost"],
     )
 
     assert result.exit_code == 1
@@ -229,10 +259,194 @@ def test_all_skills_with_mysk_block_appear_in_skill_prompt_as_name_state(monkeyp
         if "skill" in msg.lower()
         for choice in choices
     ]
-    titles = [title for title, _ in skill_choices]
+    titles = [choice.title for choice in skill_choices]
     assert "foo (active)" in titles
     assert "bar (experimental)" in titles
     assert "wip (deprecated)" in titles
+
+
+def _capture_skill_choices(monkeypatch, *, targets, skills, skill_answer=None):
+    captured_choices = {}
+    answers = iter([targets, skill_answer if skill_answer is not None else []])
+
+    def checkbox(message, choices):
+        captured_choices[message] = choices
+        return SimpleNamespace(ask=lambda: next(answers))
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+
+    _run(monkeypatch, targets=targets, skills=skills, questionary_stub=stub)
+
+    skill_choices = next(
+        choices for msg, choices in captured_choices.items() if "skill" in msg.lower()
+    )
+    return {choice.value.skill.name: choice.disabled for choice in skill_choices}
+
+
+def test_skill_cleanly_deployed_to_every_selected_target_is_disabled_in_picker(
+    monkeypatch, tmp_path
+):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    # A second, undeployed skill keeps at least one choice selectable, so the
+    # picker is still shown instead of being skipped by the all-deployed
+    # short-circuit.
+    other_source = library / "bar"
+    other_source.mkdir()
+    other_skill = InstalledSkill(
+        skill=Skill(name="bar", description="d", mysk=_EXPERIMENTAL),
+        mysk=_EXPERIMENTAL,
+        dir=other_source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").symlink_to(source)
+
+    disabled = _capture_skill_choices(
+        monkeypatch, targets=[target], skills=[skill, other_skill]
+    )
+
+    assert disabled["foo"] == "already deployed"
+    assert disabled["bar"] is None
+
+
+def test_skill_with_foreign_symlink_collision_stays_selectable_in_picker(
+    monkeypatch, tmp_path
+):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    (target_dir / "foo").symlink_to(foreign)
+
+    disabled = _capture_skill_choices(monkeypatch, targets=[target], skills=[skill])
+
+    assert disabled["foo"] is None
+
+
+def test_skill_with_stale_symlink_collision_stays_selectable_in_picker(
+    monkeypatch, tmp_path
+):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    other = library / "old-foo"
+    other.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").symlink_to(other)
+
+    disabled = _capture_skill_choices(monkeypatch, targets=[target], skills=[skill])
+
+    assert disabled["foo"] is None
+
+
+def test_skill_not_deployed_anywhere_stays_selectable_in_picker(monkeypatch, tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+
+    disabled = _capture_skill_choices(monkeypatch, targets=[target], skills=[skill])
+
+    assert disabled["foo"] is None
+
+
+def test_skill_deployed_to_only_one_of_two_selected_targets_stays_selectable(
+    monkeypatch, tmp_path
+):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    claude_dir = tmp_path / "claude"
+    claude_dir.mkdir()
+    cursor_dir = tmp_path / "cursor"
+    cursor_dir.mkdir()
+    claude_target = Target(name="claude", path=claude_dir)
+    cursor_target = Target(name="cursor", path=cursor_dir)
+    (claude_dir / "foo").symlink_to(source)
+
+    disabled = _capture_skill_choices(
+        monkeypatch, targets=[claude_target, cursor_target], skills=[skill]
+    )
+
+    assert disabled["foo"] is None
+
+
+def test_all_skills_already_deployed_to_selected_target_skips_picker_and_exits_cleanly(
+    monkeypatch, tmp_path
+):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").symlink_to(source)
+
+    prompted = []
+
+    def checkbox(message, choices):
+        prompted.append(message)
+        return SimpleNamespace(ask=lambda: [target])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[skill],
+        questionary_stub=stub,
+    )
+
+    assert result.exit_code == 0
+    assert not any("skill" in m.lower() for m in prompted)
+    assert "already deployed" in result.output.lower()
 
 
 def test_summary_printed_per_target_with_outcomes(monkeypatch):
@@ -401,3 +615,164 @@ def test_missing_skills_dir_is_created_and_reported(monkeypatch, tmp_path):
     assert skills_dir.is_dir()
     assert "Created" in result.output
     assert ".claude/skills" in result.output
+
+
+def test_overwrite_into_real_directory_prompts_and_declining_makes_no_changes(
+    monkeypatch, tmp_path
+):
+    skill_dir = tmp_path / "library" / "foo"
+    skill_dir.mkdir(parents=True)
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=skill_dir,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    real_dir = target_dir / "foo"
+    real_dir.mkdir()
+    (real_dir / "marker.txt").write_text("still here")
+
+    monkeypatch.setattr(deploy_cmd, "confirm", lambda message, *, yes: False)
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[skill],
+        questionary_stub=_make_questionary(
+            target_answer=[target],
+            skill_answer=[skill],
+        ),
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: (_ for _ in ()).throw(
+            AssertionError("reconcile_skill should not run when declined")
+        ),
+        extra_args=["--overwrite"],
+    )
+
+    assert result.exit_code == 0
+    assert "declined" in result.output
+    assert real_dir.is_dir()
+    assert (real_dir / "marker.txt").exists()
+    assert not real_dir.is_symlink()
+
+
+def test_overwrite_into_real_directory_with_yes_flag_skips_confirmation(
+    monkeypatch, tmp_path
+):
+    skill_dir = tmp_path / "library" / "foo"
+    skill_dir.mkdir(parents=True)
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=skill_dir,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").mkdir()
+
+    confirm_calls = []
+    monkeypatch.setattr(
+        deploy_cmd,
+        "confirm",
+        lambda message, *, yes: confirm_calls.append(yes) or True,
+    )
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[skill],
+        questionary_stub=_make_questionary(
+            target_answer=[target],
+            skill_answer=[skill],
+        ),
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+            outcome="overwritten"
+        ),
+        extra_args=["--overwrite", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert confirm_calls == [True]
+
+
+def test_overwrite_into_symlink_collision_does_not_prompt(monkeypatch, tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    source = library / "foo"
+    source.mkdir()
+    old = library / "old"
+    old.mkdir()
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=source,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").symlink_to(old)
+
+    confirm_calls = []
+    monkeypatch.setattr(
+        deploy_cmd,
+        "confirm",
+        lambda message, *, yes: confirm_calls.append(1) or True,
+    )
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[skill],
+        questionary_stub=_make_questionary(
+            target_answer=[target],
+            skill_answer=[skill],
+        ),
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+            outcome="overwritten"
+        ),
+        extra_args=["--overwrite"],
+    )
+
+    assert result.exit_code == 0
+    assert confirm_calls == []
+
+
+def test_overwrite_into_real_directory_without_overwrite_flag_does_not_prompt(
+    monkeypatch, tmp_path
+):
+    skill_dir = tmp_path / "library" / "foo"
+    skill_dir.mkdir(parents=True)
+    skill = InstalledSkill(
+        skill=Skill(name="foo", description="d", mysk=_ACTIVE),
+        mysk=_ACTIVE,
+        dir=skill_dir,
+    )
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    target = Target(name="claude", path=target_dir)
+    (target_dir / "foo").mkdir()
+
+    confirm_calls = []
+    monkeypatch.setattr(
+        deploy_cmd,
+        "confirm",
+        lambda message, *, yes: confirm_calls.append(1) or True,
+    )
+
+    result = _run(
+        monkeypatch,
+        targets=[target],
+        skills=[skill],
+        questionary_stub=_make_questionary(
+            target_answer=[target],
+            skill_answer=[skill],
+        ),
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+            outcome="skipped", reason="directory already exists"
+        ),
+    )
+
+    assert result.exit_code == 0
+    assert confirm_calls == []
