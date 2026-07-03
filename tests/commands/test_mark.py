@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -23,17 +24,21 @@ def _skill(root: Path, name: str, frontmatter_lines: str, body: str = "") -> Pat
     return path
 
 
+def _choice(title, value=None, disabled=None):
+    return SimpleNamespace(title=title, value=value, disabled=disabled)
+
+
 def _run(
     monkeypatch,
     repo: Path,
     extra_args=(),
-    prompt_skills=None,
+    questionary_stub=None,
     prompt_key=None,
     prompt_value=None,
 ):
     monkeypatch.setattr(mark, "skill_library", lambda: repo / "skills")
-    if prompt_skills is not None:
-        monkeypatch.setattr(mark, "_prompt_for_skills", prompt_skills)
+    if questionary_stub is not None:
+        monkeypatch.setattr(mark, "questionary", questionary_stub)
     if prompt_key is not None:
         monkeypatch.setattr(mark, "_prompt_for_key", prompt_key)
     if prompt_value is not None:
@@ -132,15 +137,6 @@ def test_noninteractive_errors_when_skill_not_found(monkeypatch, tmp_path):
     assert "not found" in result.output.lower()
 
 
-def test_skill_choice_title_includes_current_state(tmp_path):
-    path = _skill(
-        tmp_path,
-        "foo",
-        "name: foo\ndescription: d\nmysk:\n  state: experimental\n",
-    )
-    assert mark._choice_title(path) == "foo (experimental)"
-
-
 def test_noninteractive_errors_for_invalid_status_value(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
     result = _run(
@@ -205,34 +201,11 @@ def test_noninteractive_errors_for_modified_on_self_authored(monkeypatch, tmp_pa
 
 def test_interactive_exits_cleanly_when_no_skills_selected(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
-    result = _run(monkeypatch, tmp_path, prompt_skills=lambda skills: [])
+    stub = SimpleNamespace(
+        checkbox=lambda message, choices: SimpleNamespace(ask=list), Choice=_choice
+    )
+    result = _run(monkeypatch, tmp_path, questionary_stub=stub)
     assert result.exit_code == 0
-
-
-def test_prompt_for_skills_returns_chosen_paths(tmp_path, monkeypatch):
-    path = _skill(
-        tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n"
-    )
-    monkeypatch.setattr(
-        mark.questionary,
-        "checkbox",
-        lambda *a, **kw: type("Q", (), {"ask": staticmethod(lambda: [path])})(),
-    )
-    assert mark._prompt_for_skills([path]) == [path]
-
-
-def test_prompt_for_skills_returns_empty_list_when_nothing_chosen(
-    tmp_path, monkeypatch
-):
-    path = _skill(
-        tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n"
-    )
-    monkeypatch.setattr(
-        mark.questionary,
-        "checkbox",
-        lambda *a, **kw: type("Q", (), {"ask": staticmethod(lambda: None)})(),
-    )
-    assert mark._prompt_for_skills([path]) == []
 
 
 def test_prompt_for_key_returns_chosen_key(monkeypatch):
@@ -271,10 +244,15 @@ def test_interactive_marks_multiple_skills_with_same_state(monkeypatch, tmp_path
     bar = _skill(
         tmp_path, "bar", "name: bar\ndescription: d\nmysk:\n  state: experimental\n"
     )
+
+    def checkbox(message, choices):
+        return SimpleNamespace(ask=lambda: [c.value for c in choices])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
     result = _run(
         monkeypatch,
         tmp_path,
-        prompt_skills=lambda skills: [foo, bar],
+        questionary_stub=stub,
         prompt_key=lambda: "status",
         prompt_value=lambda key: LifecycleState.DEPRECATED,
     )
@@ -294,6 +272,110 @@ def test_mark_preserves_extra_fields(tmp_path):
     assert "license: MIT" in path.read_text()
 
 
+def test_skill_only_preselects_skill_and_prompts_key_and_value(monkeypatch, tmp_path):
+    path = _skill(
+        tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n"
+    )
+
+    def checkbox(message, choices):
+        msg = "picker should not be shown when a skill is given"
+        raise AssertionError(msg)
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("foo",),
+        questionary_stub=stub,
+        prompt_key=lambda: "status",
+        prompt_value=lambda key: LifecycleState.EXPERIMENTAL,
+    )
+    assert result.exit_code == 0
+    assert "state: experimental" in path.read_text()
+
+
+def test_skill_and_key_preselects_both_and_prompts_only_value(monkeypatch, tmp_path):
+    path = _skill(
+        tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n"
+    )
+    prompt_key_calls = []
+
+    def prompt_key():
+        prompt_key_calls.append(True)
+        return "status"
+
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("foo", "--key", "status"),
+        prompt_key=prompt_key,
+        prompt_value=lambda key: LifecycleState.EXPERIMENTAL,
+    )
+    assert result.exit_code == 0
+    assert "state: experimental" in path.read_text()
+    assert prompt_key_calls == []
+
+
+def test_bulk_flag_marks_multiple_named_skills_without_prompting(monkeypatch, tmp_path):
+    foo = _skill(
+        tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: experimental\n"
+    )
+    bar = _skill(
+        tmp_path, "bar", "name: bar\ndescription: d\nmysk:\n  state: experimental\n"
+    )
+    baz = _skill(
+        tmp_path, "baz", "name: baz\ndescription: d\nmysk:\n  state: experimental\n"
+    )
+
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("--bulk", "foo,bar", "--key", "status", "--value", "active"),
+    )
+    assert result.exit_code == 0
+    assert "state: active" in foo.read_text()
+    assert "state: active" in bar.read_text()
+    assert "state: experimental" in baz.read_text()
+
+
+def test_bulk_unknown_skill_errors(monkeypatch, tmp_path):
+    (tmp_path / "skills").mkdir()
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("--bulk", "ghost", "--key", "status", "--value", "active"),
+    )
+    assert result.exit_code == 1
+    assert "ghost" in result.output.lower()
+
+
+def test_all_flag_marks_every_skill(monkeypatch, tmp_path):
+    foo = _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
+    bar = _skill(tmp_path, "bar", "name: bar\ndescription: d\nmysk:\n  state: active\n")
+
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("--all", "--key", "status", "--value", "experimental"),
+    )
+    assert result.exit_code == 0
+    assert "state: experimental" in foo.read_text()
+    assert "state: experimental" in bar.read_text()
+
+
+def test_skill_and_bulk_together_exit_with_mutual_exclusivity_error(
+    monkeypatch, tmp_path
+):
+    _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("foo", "--bulk", "foo", "--key", "status", "--value", "active"),
+    )
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.output.lower()
+
+
 def test_interactive_modified_warns_and_skips_self_authored(monkeypatch, tmp_path):
     imported = _skill(
         tmp_path, "imp", _IMPORTED_FM.format(name="imp", modified="false")
@@ -303,10 +385,15 @@ def test_interactive_modified_warns_and_skips_self_authored(monkeypatch, tmp_pat
         "self",
         "name: self\ndescription: d\nmysk:\n  state: active\n",
     )
+
+    def checkbox(message, choices):
+        return SimpleNamespace(ask=lambda: [c.value for c in choices])
+
+    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
     result = _run(
         monkeypatch,
         tmp_path,
-        prompt_skills=lambda skills: [imported, selfmade],
+        questionary_stub=stub,
         prompt_key=lambda: "modified",
         prompt_value=lambda key: True,
     )
