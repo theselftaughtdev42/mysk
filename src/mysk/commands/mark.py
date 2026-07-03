@@ -11,7 +11,12 @@ from rich.markup import escape
 
 from mysk.domain import LifecycleState, Skill
 from mysk.io import frontmatter
-from mysk.io.skills import load_skills, skill_library
+from mysk.io.skills import InstalledSkill, SkillLoadError, load_skills, skill_library
+from mysk.skill_operation_pathway import (
+    SkillSelectionError,
+    build_skill_choices,
+    resolve_skill_selection,
+)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -40,20 +45,6 @@ def set_skill_lifecycle(skill_path: Path, state: LifecycleState) -> None:
     data, body = frontmatter.read(text)
     skill = Skill.from_frontmatter(data).with_state(state)
     skill_path.write_text(frontmatter.write(skill.to_frontmatter(), body))
-
-
-def _choice_title(path: Path) -> str:
-    data, _ = frontmatter.read(path.read_text())
-    state = data.get("mysk", {}).get("state", "unknown")
-    return f"{path.parent.name} ({state})"
-
-
-def _prompt_for_skills(skills: list[Path]) -> list[Path]:
-    chosen = questionary.checkbox(
-        "Select skills to mark:\n",
-        choices=[questionary.Choice(title=_choice_title(p), value=p) for p in skills],
-    ).ask()
-    return chosen or []
 
 
 def _prompt_for_key() -> str:
@@ -93,12 +84,126 @@ def _apply_marking(skill_path: Path, *, value: LifecycleState | bool) -> str | N
         return None
 
 
+def _validate_key(key: str) -> None:
+    if key not in _VALID_KEYS:
+        rprint(f"[red]Unknown key: {escape(key)}[/red]", file=sys.stderr)
+        raise typer.Exit(1)
+
+
+def _resolve_value(key: str, value: str) -> LifecycleState | bool:
+    if key == "status":
+        try:
+            return LifecycleState(value.lower())
+        except ValueError as e:
+            rprint(f"[red]Unknown status: {escape(value)}[/red]", file=sys.stderr)
+            raise typer.Exit(1) from e
+    lower = value.lower()
+    if lower not in ("true", "false"):
+        rprint(
+            f"[red]Invalid value for modified: {escape(value)}"
+            " — must be true or false.[/red]",
+            file=sys.stderr,
+        )
+        raise typer.Exit(1)
+    return lower == "true"
+
+
+def _report_selection_error(
+    exc: SkillSelectionError,
+    *,
+    skill_name: str | None,
+    bulk: str | None,
+    select_all: bool,
+    errors: list[SkillLoadError],
+) -> None:
+    if skill_name is None or bulk is not None or select_all:
+        rprint(f"[red]Error:[/red] {exc}", file=sys.stderr)
+        return
+    error_match = next((e for e in errors if e.path.parent.name == skill_name), None)
+    if error_match is None:
+        rprint(
+            f"[red]{escape(skill_name)} not found in the Skill Library.[/red]",
+            file=sys.stderr,
+        )
+    else:
+        rprint(
+            f"[red]{escape(skill_name)} is not a valid skill"
+            f" — {error_match.schema_error}."
+            " Use mysk import to add skills to the library.[/red]",
+            file=sys.stderr,
+        )
+
+
+def _resolve_selection(
+    installed: list[InstalledSkill], selected: list[InstalledSkill] | None
+) -> list[InstalledSkill]:
+    if selected is not None:
+        return selected
+    if not installed:
+        rprint("[dim]No skills in the Skill Library to mark.[/dim]")
+        raise typer.Exit(0)
+    choices = build_skill_choices(installed, relevance=lambda _: None)
+    chosen = questionary.checkbox("Select skills to mark:\n", choices=choices).ask()
+    if not chosen:
+        raise typer.Exit(0)
+    return chosen
+
+
+def _apply_and_report(
+    selected: list[InstalledSkill],
+    *,
+    skill_name: str | None,
+    chosen_key: str,
+    chosen_value: LifecycleState | bool,
+) -> None:
+    warnings = []
+    for result in selected:
+        warning = _apply_marking(result.skill_md, value=chosen_value)
+        if warning:
+            warnings.append(warning)
+
+    if skill_name is not None and warnings:
+        rprint(warnings[0], file=sys.stderr)
+        raise typer.Exit(1)
+
+    for warning in warnings:
+        rprint(warning)
+
+    display = (
+        chosen_value.value
+        if isinstance(chosen_value, LifecycleState)
+        else str(chosen_value).lower()
+    )
+
+    if len(selected) == 1:
+        rprint(
+            f"[green]Marked {escape(selected[0].skill.name)}: "
+            f"{escape(chosen_key)} = {escape(display)}.[/green]"
+        )
+    else:
+        names = ", ".join(escape(r.skill.name) for r in selected)
+        rprint(
+            f"[green][bold]{names}[/bold] marked: "
+            f"{escape(chosen_key)}={escape(display)}.[/green]"
+        )
+
+
 @app.callback()
 def mark_skill(
     skill_name: Annotated[
         str | None,
         typer.Argument(help="Name of the skill to mark."),
     ] = None,
+    *,
+    bulk: Annotated[
+        str | None,
+        typer.Option(
+            "--bulk", help="Comma-separated skill names to mark; skips the picker."
+        ),
+    ] = None,
+    select_all: Annotated[
+        bool, typer.Option("--all", help="Mark every skill in the Skill Library.")
+    ] = False,
     key: Annotated[
         str | None,
         typer.Option("--key", help="Marking to set (status, modified)."),
@@ -112,77 +217,37 @@ def mark_skill(
     skills_root = skill_library()
     installed, errors = load_skills(skills_root)
 
-    if skill_name is not None and key is not None and value is not None:
-        installed_match = next((r for r in installed if r.dir.name == skill_name), None)
-        if installed_match is None:
-            error_match = next(
-                (r for r in errors if r.path.parent.name == skill_name), None
-            )
-            if error_match is None:
-                rprint(
-                    f"[red]{escape(skill_name)} not found in the Skill Library.[/red]",
-                    file=sys.stderr,
-                )
-            else:
-                rprint(
-                    f"[red]{escape(skill_name)} is not a valid skill"
-                    f" — {error_match.schema_error}."
-                    " Use mysk import to add skills to the library.[/red]",
-                    file=sys.stderr,
-                )
-            raise typer.Exit(1)
-        if key not in _VALID_KEYS:
-            rprint(f"[red]Unknown key: {escape(key)}[/red]", file=sys.stderr)
-            raise typer.Exit(1)
-        if key == "status":
-            try:
-                resolved: LifecycleState | bool = LifecycleState(value.lower())
-            except ValueError as e:
-                rprint(f"[red]Unknown status: {escape(value)}[/red]", file=sys.stderr)
-                raise typer.Exit(1) from e
-        else:
-            lower = value.lower()
-            if lower not in ("true", "false"):
-                rprint(
-                    f"[red]Invalid value for modified: {escape(value)}"
-                    " — must be true or false.[/red]",
-                    file=sys.stderr,
-                )
-                raise typer.Exit(1)
-            resolved = lower == "true"
-        warning = _apply_marking(installed_match.skill_md, value=resolved)
-        if warning:
-            rprint(warning, file=sys.stderr)
-            raise typer.Exit(1)
-        display_value = str(resolved) if key == "modified" else value.lower()
-        rprint(
-            f"[green]Marked {escape(skill_name)}: "
-            f"{escape(key)} = {escape(display_value)}.[/green]"
+    try:
+        selected = resolve_skill_selection(
+            skill=skill_name, bulk=bulk, select_all=select_all, eligible=installed
         )
-        return
+    except SkillSelectionError as exc:
+        _report_selection_error(
+            exc,
+            skill_name=skill_name,
+            bulk=bulk,
+            select_all=select_all,
+            errors=errors,
+        )
+        raise typer.Exit(1) from None
 
-    skill_mds = [r.skill_md for r in installed]
+    selected = _resolve_selection(installed, selected)
 
-    if not skill_mds:
-        rprint("[dim]No skills in the Skill Library to mark.[/dim]")
-        raise typer.Exit(0)
+    if key is None:
+        chosen_key = _prompt_for_key()
+    else:
+        _validate_key(key)
+        chosen_key = key
 
-    selected = _prompt_for_skills(skill_mds)
-    if not selected:
-        raise typer.Exit(0)
-    chosen_key = _prompt_for_key()
-    chosen_value = _prompt_for_value(chosen_key)
-    for skill_path in selected:
-        warning = _apply_marking(skill_path, value=chosen_value)
-        if warning:
-            rprint(warning)
-    names = ", ".join(escape(p.parent.name) for p in selected)
-    display = (
-        chosen_value.value
-        if isinstance(chosen_value, LifecycleState)
-        else str(chosen_value).lower()
+    chosen_value = (
+        _prompt_for_value(chosen_key)
+        if value is None
+        else _resolve_value(chosen_key, value)
     )
-    rprint(
-        f"[green][bold]{names}[/bold] marked: "
-        f"{escape(chosen_key)}={escape(display)}.[/green]"
+
+    _apply_and_report(
+        selected,
+        skill_name=skill_name,
+        chosen_key=chosen_key,
+        chosen_value=chosen_value,
     )
