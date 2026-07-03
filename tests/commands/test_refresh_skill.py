@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 
 from mysk.cli import app
 from mysk.commands import refresh_skill as refresh_cmd
+from tests.conftest import QuestionaryStub
 
 runner = CliRunner()
 
@@ -93,18 +94,12 @@ def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, tmp_pat
         )
     )
 
-    captured = {}
-
-    def checkbox(message, choices):
-        captured["choices"] = choices
-        return type("Answer", (), {"ask": staticmethod(list)})()
-
-    stub = type("Stub", (), {"checkbox": staticmethod(checkbox)})()
+    stub = QuestionaryStub([])
 
     result = _run(monkeypatch, tmp_path, questionary_stub=stub)
 
     assert result.exit_code == 0
-    reasons = {c.value.dir.name: c.disabled for c in captured["choices"]}
+    reasons = {c.value.dir.name: c.disabled for c in stub.choices_for("refresh")}
     assert reasons["self"] == "self-authored — nothing to refresh"
     assert reasons["dirty"] == "modified — needs review before refresh"
     assert reasons["clean"] is None
@@ -114,19 +109,7 @@ def test_refresh_no_args_nothing_selected_exits_cleanly(monkeypatch, tmp_path):
     (tmp_path / "clean").mkdir()
     (tmp_path / "clean" / "SKILL.md").write_text(_installed_skill_md(name="clean"))
 
-    stub = type(
-        "Stub",
-        (),
-        {
-            "checkbox": staticmethod(
-                lambda message, choices: type(
-                    "Answer", (), {"ask": staticmethod(list)}
-                )()
-            )
-        },
-    )()
-
-    result = _run(monkeypatch, tmp_path, questionary_stub=stub)
+    result = _run(monkeypatch, tmp_path, questionary_stub=QuestionaryStub([]))
 
     assert result.exit_code == 0
     assert "Nothing selected." in result.output
@@ -147,10 +130,7 @@ def test_refresh_no_args_picker_refreshes_selected_skill(monkeypatch, tmp_path):
         )
     )
 
-    def checkbox(message, choices):
-        return type("Answer", (), {"ask": staticmethod(lambda: [choices[0].value])})()
-
-    stub = type("Stub", (), {"checkbox": staticmethod(checkbox)})()
+    stub = QuestionaryStub(lambda choices: [choices[0].value])
 
     result = _run(monkeypatch, tmp_path, questionary_stub=stub)
 
@@ -585,12 +565,7 @@ def test_refresh_bulk_flag_refreshes_named_subset_without_picker(monkeypatch, tm
         )
     )
 
-    prompted = []
-    stub = type(
-        "Stub",
-        (),
-        {"checkbox": staticmethod(lambda message, choices: prompted.append(message))},
-    )()
+    stub = QuestionaryStub()
 
     result = _run(
         monkeypatch,
@@ -600,7 +575,7 @@ def test_refresh_bulk_flag_refreshes_named_subset_without_picker(monkeypatch, tm
     )
 
     assert result.exit_code == 0, result.output
-    assert prompted == []
+    assert stub.prompted_messages() == []
     assert "description: improved a" in (tmp_path / "skill-a" / "SKILL.md").read_text()
     assert (
         "description: does cool things"

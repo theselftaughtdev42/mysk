@@ -1,5 +1,4 @@
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -7,6 +6,7 @@ from typer.testing import CliRunner
 from mysk.cli import app
 from mysk.commands import mark
 from mysk.domain import LifecycleState
+from tests.conftest import QuestionaryStub
 
 runner = CliRunner()
 
@@ -22,10 +22,6 @@ def _skill(root: Path, name: str, frontmatter_lines: str, body: str = "") -> Pat
     path = skill_dir / "SKILL.md"
     path.write_text(f"---\n{frontmatter_lines}---\n{body}")
     return path
-
-
-def _choice(title, value=None, disabled=None):
-    return SimpleNamespace(title=title, value=value, disabled=disabled)
 
 
 def _run(
@@ -201,39 +197,22 @@ def test_noninteractive_errors_for_modified_on_self_authored(monkeypatch, tmp_pa
 
 def test_interactive_exits_cleanly_when_no_skills_selected(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
-    stub = SimpleNamespace(
-        checkbox=lambda message, choices: SimpleNamespace(ask=list), Choice=_choice
-    )
-    result = _run(monkeypatch, tmp_path, questionary_stub=stub)
+    result = _run(monkeypatch, tmp_path, questionary_stub=QuestionaryStub([]))
     assert result.exit_code == 0
 
 
 def test_prompt_for_key_returns_chosen_key(monkeypatch):
-    monkeypatch.setattr(
-        mark.questionary,
-        "select",
-        lambda *a, **kw: type("Q", (), {"ask": staticmethod(lambda: "status")})(),
-    )
+    monkeypatch.setattr(mark, "questionary", QuestionaryStub("status"))
     assert mark._prompt_for_key() == "status"
 
 
 def test_prompt_for_value_status_returns_lifecycle_state(monkeypatch):
-    monkeypatch.setattr(
-        mark.questionary,
-        "select",
-        lambda *a, **kw: type(
-            "Q", (), {"ask": staticmethod(lambda: LifecycleState.ACTIVE)}
-        )(),
-    )
+    monkeypatch.setattr(mark, "questionary", QuestionaryStub(LifecycleState.ACTIVE))
     assert mark._prompt_for_value("status") == LifecycleState.ACTIVE
 
 
 def test_prompt_for_value_modified_returns_bool(monkeypatch):
-    monkeypatch.setattr(
-        mark.questionary,
-        "select",
-        lambda *a, **kw: type("Q", (), {"ask": staticmethod(lambda: True)})(),
-    )
+    monkeypatch.setattr(mark, "questionary", QuestionaryStub(True))
     assert mark._prompt_for_value("modified") is True
 
 
@@ -245,10 +224,7 @@ def test_interactive_marks_multiple_skills_with_same_state(monkeypatch, tmp_path
         tmp_path, "bar", "name: bar\ndescription: d\nmysk:\n  state: experimental\n"
     )
 
-    def checkbox(message, choices):
-        return SimpleNamespace(ask=lambda: [c.value for c in choices])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
+    stub = QuestionaryStub(lambda choices: [c.value for c in choices])
     result = _run(
         monkeypatch,
         tmp_path,
@@ -277,16 +253,11 @@ def test_skill_only_preselects_skill_and_prompts_key_and_value(monkeypatch, tmp_
         tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n"
     )
 
-    def checkbox(message, choices):
-        msg = "picker should not be shown when a skill is given"
-        raise AssertionError(msg)
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
     result = _run(
         monkeypatch,
         tmp_path,
         extra_args=("foo",),
-        questionary_stub=stub,
+        questionary_stub=QuestionaryStub(),
         prompt_key=lambda: "status",
         prompt_value=lambda key: LifecycleState.EXPERIMENTAL,
     )
@@ -386,10 +357,7 @@ def test_interactive_modified_warns_and_skips_self_authored(monkeypatch, tmp_pat
         "name: self\ndescription: d\nmysk:\n  state: active\n",
     )
 
-    def checkbox(message, choices):
-        return SimpleNamespace(ask=lambda: [c.value for c in choices])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
+    stub = QuestionaryStub(lambda choices: [c.value for c in choices])
     result = _run(
         monkeypatch,
         tmp_path,

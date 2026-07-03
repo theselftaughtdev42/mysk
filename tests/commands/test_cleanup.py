@@ -1,38 +1,19 @@
-from pathlib import Path
-from types import SimpleNamespace
-
 from typer.testing import CliRunner
 
 from mysk.cli import app
 from mysk.commands import cleanup as cleanup_cmd
-from mysk.domain import LifecycleState, MyskBlock, Skill
+from mysk.domain import LifecycleState
 from mysk.io.deploy import RemoveResult
-from mysk.io.skills import InstalledSkill
-from mysk.io.targets import Target
+from tests.conftest import QuestionaryStub, make_skill, make_target, patch_skill_sources
 
 runner = CliRunner()
 
-_CLAUDE_TARGET = Target(name="claude", path=Path("/home/user/.claude/skills"))
-_CURSOR_TARGET = Target(name="cursor", path=Path("/home/user/.cursor/skills"))
+_CLAUDE_TARGET = make_target("claude")
+_CURSOR_TARGET = make_target("cursor")
 
-_ACTIVE = MyskBlock(state=LifecycleState.ACTIVE)
-_DEPRECATED = MyskBlock(state=LifecycleState.DEPRECATED)
-
-_ACTIVE_SKILL = InstalledSkill(
-    skill=Skill(name="foo", description="d", mysk=_ACTIVE),
-    mysk=_ACTIVE,
-    dir=Path("/fake/skills/foo"),
-)
-_DEPRECATED_SKILL = InstalledSkill(
-    skill=Skill(name="wip", description="d", mysk=_DEPRECATED),
-    mysk=_DEPRECATED,
-    dir=Path("/fake/skills/wip"),
-)
-_DEPRECATED_SKILL_2 = InstalledSkill(
-    skill=Skill(name="baz", description="d", mysk=_DEPRECATED),
-    mysk=_DEPRECATED,
-    dir=Path("/fake/skills/baz"),
-)
+_ACTIVE_SKILL = make_skill("foo", state=LifecycleState.ACTIVE)
+_DEPRECATED_SKILL = make_skill("wip", state=LifecycleState.DEPRECATED)
+_DEPRECATED_SKILL_2 = make_skill("baz", state=LifecycleState.DEPRECATED)
 
 
 def _run(
@@ -44,9 +25,7 @@ def _run(
     remove_fn=None,
     extra_args=(),
 ):
-    monkeypatch.setattr(cleanup_cmd, "skill_library", lambda: Path("/fake/skills"))
-    monkeypatch.setattr(cleanup_cmd, "discover_targets", lambda: list(targets))
-    monkeypatch.setattr(cleanup_cmd, "load_skills", lambda _: (list(skills), []))
+    patch_skill_sources(monkeypatch, cleanup_cmd, targets=targets, skills=skills)
     monkeypatch.setattr(
         cleanup_cmd,
         "confirm",
@@ -67,14 +46,7 @@ def test_no_deprecated_skills_prints_nothing_to_clean_up(monkeypatch):
 
 
 def test_no_args_picker_shows_all_deprecated_skills_selectable(monkeypatch):
-    captured = {}
-
-    def checkbox(message, choices):
-        captured["message"] = message
-        captured["choices"] = choices
-        return SimpleNamespace(ask=lambda: [choices[0].value])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    stub = QuestionaryStub(lambda choices: [choices[0].value])
     removed = []
 
     result = _run(
@@ -88,21 +60,16 @@ def test_no_args_picker_shows_all_deprecated_skills_selectable(monkeypatch):
     )
 
     assert result.exit_code == 0
-    assert all(choice.disabled is None for choice in captured["choices"])
+    assert all(choice.disabled is None for choice in stub.choices_for("clean"))
     assert removed == ["wip"]
 
 
 def test_nothing_selected_at_picker_exits_cleanly(monkeypatch):
-    stub = SimpleNamespace(
-        checkbox=lambda message, choices: SimpleNamespace(ask=list),
-        Choice=lambda title, value=None: value,
-    )
-
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_DEPRECATED_SKILL],
-        questionary_stub=stub,
+        questionary_stub=QuestionaryStub([]),
     )
 
     assert result.exit_code == 0
@@ -160,11 +127,7 @@ def test_all_flag_deprecated_skill_not_deployed_shows_skipped(monkeypatch):
 
 
 def test_bulk_flag_removes_only_named_skills_without_showing_picker(monkeypatch):
-    prompted = []
-    stub = SimpleNamespace(
-        checkbox=lambda message, choices: prompted.append(message),
-        Choice=lambda title, value=None: value,
-    )
+    stub = QuestionaryStub()
     removed = []
 
     result = _run(
@@ -179,7 +142,7 @@ def test_bulk_flag_removes_only_named_skills_without_showing_picker(monkeypatch)
     )
 
     assert result.exit_code == 0
-    assert prompted == []
+    assert stub.prompted_messages() == []
     assert removed == ["baz"]
 
 

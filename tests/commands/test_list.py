@@ -4,44 +4,16 @@ from typer.testing import CliRunner
 
 from mysk.cli import app
 from mysk.commands import list as list_cmd
-from mysk.domain import LifecycleState, MyskBlock, Skill
-from mysk.domain.provenance import Provenance
+from mysk.domain import LifecycleState
 from mysk.io.skills import InstalledSkill, SkillLoadError
-from mysk.io.targets import Target
+from tests.conftest import make_skill, make_target, patch_skill_sources
 
 runner = CliRunner()
 
-_ACTIVE = MyskBlock(state=LifecycleState.ACTIVE)
-_DEPRECATED = MyskBlock(state=LifecycleState.DEPRECATED)
-_IMPORTED = MyskBlock(
-    state=LifecycleState.ACTIVE,
-    provenance=Provenance(source="https://example.com", modified=False),
-)
-_MODIFIED = MyskBlock(
-    state=LifecycleState.ACTIVE,
-    provenance=Provenance(source="https://example.com", modified=True),
-)
-
-_ACTIVE_SKILL = InstalledSkill(
-    skill=Skill(name="foo", description="d", mysk=_ACTIVE),
-    mysk=_ACTIVE,
-    dir=Path("/fake/skills/foo"),
-)
-_DEPRECATED_SKILL = InstalledSkill(
-    skill=Skill(name="old", description="d", mysk=_DEPRECATED),
-    mysk=_DEPRECATED,
-    dir=Path("/fake/skills/old"),
-)
-_IMPORTED_SKILL = InstalledSkill(
-    skill=Skill(name="ext", description="d", mysk=_IMPORTED),
-    mysk=_IMPORTED,
-    dir=Path("/fake/skills/ext"),
-)
-_MODIFIED_SKILL = InstalledSkill(
-    skill=Skill(name="mod", description="d", mysk=_MODIFIED),
-    mysk=_MODIFIED,
-    dir=Path("/fake/skills/mod"),
-)
+_ACTIVE_SKILL = make_skill("foo", state=LifecycleState.ACTIVE)
+_DEPRECATED_SKILL = make_skill("old", state=LifecycleState.DEPRECATED)
+_IMPORTED_SKILL = make_skill("ext", source="https://example.com")
+_MODIFIED_SKILL = make_skill("mod", source="https://example.com", modified=True)
 _NO_MYSK_BLOCK_SKILL = SkillLoadError(
     path=Path("/fake/skills/legacy/SKILL.md"),
     schema_error="missing mysk block",
@@ -50,14 +22,13 @@ _BAD_SKILL = SkillLoadError(
     path=Path("/fake/skills/bad/SKILL.md"),
     schema_error="mysk block missing state",
 )
-_CLAUDE_TARGET = Target(name="claude", path=Path("/home/user/.claude/skills"))
+_CLAUDE_TARGET = make_target("claude")
 
 
 def _run(monkeypatch, targets=(), skills=(), deployed_fn=None):
     installed = [s for s in skills if isinstance(s, InstalledSkill)]
     errors = [s for s in skills if isinstance(s, SkillLoadError)]
-    monkeypatch.setattr(list_cmd, "skill_library", lambda: Path("/fake/skills"))
-    monkeypatch.setattr(list_cmd, "discover_targets", lambda **_: list(targets))
+    patch_skill_sources(monkeypatch, list_cmd, targets=targets)
     monkeypatch.setattr(list_cmd, "load_skills", lambda _: (installed, errors))
     if deployed_fn is not None:
         monkeypatch.setattr(list_cmd, "is_deployed", deployed_fn)
