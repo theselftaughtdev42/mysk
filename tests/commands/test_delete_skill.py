@@ -1,11 +1,11 @@
 from pathlib import Path
-from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
 from mysk.cli import app
 from mysk.commands import delete_skill as delete_cmd
 from mysk.io.targets import Target
+from tests.conftest import QuestionaryStub
 
 runner = CliRunner()
 
@@ -34,10 +34,6 @@ def _capture_confirm(captured: dict, *, answer: bool = True):
         return answer
 
     return confirm_fn
-
-
-def _choice(title, value=None, disabled=None):
-    return SimpleNamespace(title=title, value=value, disabled=disabled)
 
 
 def _run(
@@ -309,13 +305,7 @@ def test_no_args_shows_picker_with_every_skill_selectable(monkeypatch, tmp_path)
     for name in skill_names:
         _make_skill(library, name)
 
-    captured = {}
-
-    def checkbox(message, choices):
-        captured["choices"] = choices
-        return SimpleNamespace(ask=lambda: [choices[0].value])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=_choice)
+    stub = QuestionaryStub(lambda choices: [choices[0].value])
 
     result = _run(
         monkeypatch,
@@ -325,9 +315,10 @@ def test_no_args_shows_picker_with_every_skill_selectable(monkeypatch, tmp_path)
         extra_args=[],
     )
 
+    choices = stub.choices_for("skill")
     assert result.exit_code == 0
-    assert all(choice.disabled is None for choice in captured["choices"])
-    assert len(captured["choices"]) == len(skill_names)
+    assert all(choice.disabled is None for choice in choices)
+    assert len(choices) == len(skill_names)
 
 
 def test_no_args_picker_nothing_selected_exits_cleanly(monkeypatch, tmp_path):
@@ -335,15 +326,10 @@ def test_no_args_picker_nothing_selected_exits_cleanly(monkeypatch, tmp_path):
     library.mkdir()
     _make_skill(library, "foo")
 
-    stub = SimpleNamespace(
-        checkbox=lambda message, choices: SimpleNamespace(ask=list),
-        Choice=_choice,
-    )
-
     result = _run(
         monkeypatch,
         library=library,
-        questionary_stub=stub,
+        questionary_stub=QuestionaryStub([]),
         extra_args=[],
     )
 

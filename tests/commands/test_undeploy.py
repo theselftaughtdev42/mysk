@@ -1,39 +1,19 @@
-from pathlib import Path
-from types import SimpleNamespace
-
 from typer.testing import CliRunner
 
 from mysk.cli import app
 from mysk.commands import undeploy as undeploy_cmd
-from mysk.domain import LifecycleState, MyskBlock, Skill
+from mysk.domain import LifecycleState
 from mysk.io.deploy import RemoveResult
-from mysk.io.skills import InstalledSkill
-from mysk.io.targets import Target
+from tests.conftest import QuestionaryStub, make_skill, make_target, patch_skill_sources
 
 runner = CliRunner()
 
-_CLAUDE_TARGET = Target(name="claude", path=Path("/home/user/.claude/skills"))
-_CURSOR_TARGET = Target(name="cursor", path=Path("/home/user/.cursor/skills"))
+_CLAUDE_TARGET = make_target("claude")
+_CURSOR_TARGET = make_target("cursor")
 
-_ACTIVE = MyskBlock(state=LifecycleState.ACTIVE)
-_EXPERIMENTAL = MyskBlock(state=LifecycleState.EXPERIMENTAL)
-_DEPRECATED = MyskBlock(state=LifecycleState.DEPRECATED)
-
-_ACTIVE_SKILL = InstalledSkill(
-    skill=Skill(name="foo", description="d", mysk=_ACTIVE),
-    mysk=_ACTIVE,
-    dir=Path("/fake/skills/foo"),
-)
-_EXPERIMENTAL_SKILL = InstalledSkill(
-    skill=Skill(name="bar", description="d", mysk=_EXPERIMENTAL),
-    mysk=_EXPERIMENTAL,
-    dir=Path("/fake/skills/bar"),
-)
-_DEPRECATED_SKILL = InstalledSkill(
-    skill=Skill(name="wip", description="d", mysk=_DEPRECATED),
-    mysk=_DEPRECATED,
-    dir=Path("/fake/skills/wip"),
-)
+_ACTIVE_SKILL = make_skill("foo", state=LifecycleState.ACTIVE)
+_EXPERIMENTAL_SKILL = make_skill("bar", state=LifecycleState.EXPERIMENTAL)
+_DEPRECATED_SKILL = make_skill("wip", state=LifecycleState.DEPRECATED)
 
 
 def _run(
@@ -45,9 +25,7 @@ def _run(
     is_deployed_fn=None,
     extra_args=(),
 ):
-    monkeypatch.setattr(undeploy_cmd, "skill_library", lambda: Path("/fake/skills"))
-    monkeypatch.setattr(undeploy_cmd, "discover_targets", lambda: list(targets))
-    monkeypatch.setattr(undeploy_cmd, "load_skills", lambda _: (list(skills), []))
+    patch_skill_sources(monkeypatch, undeploy_cmd, targets=targets, skills=skills)
     monkeypatch.setattr(
         undeploy_cmd,
         "is_deployed",
@@ -60,28 +38,8 @@ def _run(
     return runner.invoke(app, ["undeploy", *extra_args])
 
 
-def _make_questionary(target_answer, skill_answer=None):
-    answers = iter([target_answer, skill_answer])
-
-    def checkbox(*args, **kwargs):
-        return SimpleNamespace(ask=lambda: next(answers))
-
-    return SimpleNamespace(
-        checkbox=checkbox,
-        Choice=lambda title, value=None: value,
-    )
-
-
 def _capture_skill_choices(monkeypatch, *, targets, skills, is_deployed_fn=None):
-    captured_choices = {}
-    answers = iter([targets, []])
-
-    def checkbox(message, choices):
-        captured_choices[message] = choices
-        return SimpleNamespace(ask=lambda: next(answers))
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
-
+    stub = QuestionaryStub(list(targets), [])
     _run(
         monkeypatch,
         targets=targets,
@@ -89,10 +47,7 @@ def _capture_skill_choices(monkeypatch, *, targets, skills, is_deployed_fn=None)
         questionary_stub=stub,
         is_deployed_fn=is_deployed_fn,
     )
-
-    skill_choices = next(
-        choices for msg, choices in captured_choices.items() if "skill" in msg.lower()
-    )
+    skill_choices = stub.choices_for("skill")
     return {choice.value.skill.name: choice.disabled for choice in skill_choices}
 
 
@@ -126,9 +81,8 @@ def test_summary_printed_per_target_with_outcomes(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=_make_questionary(
-            target_answer=[_CLAUDE_TARGET, _CURSOR_TARGET],
-            skill_answer=[_ACTIVE_SKILL],
+        questionary_stub=QuestionaryStub(
+            [_CLAUDE_TARGET, _CURSOR_TARGET], [_ACTIVE_SKILL]
         ),
         remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
     )
@@ -140,13 +94,7 @@ def test_summary_printed_per_target_with_outcomes(monkeypatch):
 
 
 def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypatch):
-    prompted = []
-
-    def checkbox(message, choices):
-        prompted.append(message)
-        return SimpleNamespace(ask=lambda: [_ACTIVE_SKILL])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    stub = QuestionaryStub([_ACTIVE_SKILL])
 
     result = _run(
         monkeypatch,
@@ -158,7 +106,7 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
     )
 
     assert result.exit_code == 0
-    assert not any("target" in m.lower() for m in prompted)
+    assert not any("target" in m.lower() for m in stub.prompted_messages())
     assert "claude" in result.output
     assert "cursor" not in result.output
 
@@ -166,13 +114,7 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
 def test_skill_positional_removes_named_skill_without_showing_skill_prompt(
     monkeypatch,
 ):
-    prompted = []
-
-    def checkbox(message, choices):
-        prompted.append(message)
-        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    stub = QuestionaryStub([_CLAUDE_TARGET])
     removed = []
 
     def remove(target_path, skill_library_path):
@@ -189,18 +131,12 @@ def test_skill_positional_removes_named_skill_without_showing_skill_prompt(
     )
 
     assert result.exit_code == 0
-    assert not any("skill" in m.lower() for m in prompted)
+    assert not any("skill" in m.lower() for m in stub.prompted_messages())
     assert removed == ["foo"]
 
 
 def test_bulk_flag_removes_named_skills_without_showing_skill_prompt(monkeypatch):
-    prompted = []
-
-    def checkbox(message, choices):
-        prompted.append(message)
-        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    stub = QuestionaryStub([_CLAUDE_TARGET])
     removed = []
 
     def remove(target_path, skill_library_path):
@@ -217,20 +153,14 @@ def test_bulk_flag_removes_named_skills_without_showing_skill_prompt(monkeypatch
     )
 
     assert result.exit_code == 0
-    assert not any("skill" in m.lower() for m in prompted)
+    assert not any("skill" in m.lower() for m in stub.prompted_messages())
     assert removed == ["foo"]
 
 
 def test_all_flag_removes_every_deployable_skill_without_showing_skill_prompt(
     monkeypatch,
 ):
-    prompted = []
-
-    def checkbox(message, choices):
-        prompted.append(message)
-        return SimpleNamespace(ask=lambda: [_CLAUDE_TARGET])
-
-    stub = SimpleNamespace(checkbox=checkbox, Choice=lambda title, value=None: value)
+    stub = QuestionaryStub([_CLAUDE_TARGET])
     removed = []
 
     def remove(target_path, skill_library_path):
@@ -247,7 +177,7 @@ def test_all_flag_removes_every_deployable_skill_without_showing_skill_prompt(
     )
 
     assert result.exit_code == 0
-    assert not any("skill" in m.lower() for m in prompted)
+    assert not any("skill" in m.lower() for m in stub.prompted_messages())
     assert sorted(removed) == ["bar", "foo"]
 
 
@@ -280,7 +210,7 @@ def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=_make_questionary(target_answer=[_CLAUDE_TARGET]),
+        questionary_stub=QuestionaryStub([_CLAUDE_TARGET]),
         extra_args=["--bulk", "foo,ghost"],
     )
 
@@ -293,7 +223,7 @@ def test_nothing_selected_at_target_prompt_exits_cleanly(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=_make_questionary(target_answer=[]),
+        questionary_stub=QuestionaryStub([]),
     )
 
     assert result.exit_code == 0
@@ -305,10 +235,7 @@ def test_nothing_selected_at_skill_prompt_exits_cleanly(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=_make_questionary(
-            target_answer=[_CLAUDE_TARGET],
-            skill_answer=[],
-        ),
+        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], []),
     )
 
     assert result.exit_code == 0
@@ -320,10 +247,7 @@ def test_skip_reason_is_printed_alongside_outcome(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=_make_questionary(
-            target_answer=[_CLAUDE_TARGET],
-            skill_answer=[_ACTIVE_SKILL],
-        ),
+        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
         remove_fn=lambda t, skill_library_path: RemoveResult(
             outcome="skipped", reason="not deployed"
         ),
