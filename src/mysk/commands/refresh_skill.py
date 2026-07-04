@@ -7,8 +7,9 @@ from typing import Annotated, cast
 
 import questionary
 import typer
-from rich import print as rprint
+from rich.markup import escape
 
+from mysk.console import console, err_console
 from mysk.domain.import_url import ImportUrl
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
@@ -64,7 +65,7 @@ def refresh_skill(
         )
     except SkillSelectionError as exc:
         if name is None or bulk is not None or all_skills:
-            rprint(f"[red]Error:[/red] {exc}")
+            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
             raise typer.Exit(1) from None
         selected = None
 
@@ -78,50 +79,55 @@ def refresh_skill(
             "Select skills to refresh:\n", choices=choices
         ).ask()
         if not selected:
-            rprint("Nothing selected.")
+            console.print("Nothing selected.")
             raise typer.Exit(0)
 
     refreshable = [r for r in selected if not r.mysk.provenance.modified]
     needs_review = [r for r in selected if r.mysk.provenance.modified]
 
     if not refreshable and not needs_review:
-        rprint("No imported skills found in the Skill Library.")
+        console.print("No imported skills found in the Skill Library.")
         return
 
     for result in refreshable:
         _refresh_one(result.dir.name, library, yes=yes)
 
     if needs_review:
-        rprint("\n[bold yellow]Needs review[/bold yellow] (modified: true — skipped):")
+        console.print(
+            "\n[bold yellow]Needs review[/bold yellow] (modified: true — skipped):"
+        )
         for result in needs_review:
-            rprint(f"  {result.dir.name}")
+            console.print(f"  {escape(result.dir.name)}")
 
 
 def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     skill_md_path = library / name / "SKILL.md"
 
     if not skill_md_path.exists():
-        rprint(f"[red]Error:[/red] Skill {name!r} not found in the Skill Library.")
+        err_console.print(
+            f"[red]Error:[/red] Skill {escape(repr(name))} "
+            "not found in the Skill Library."
+        )
         raise typer.Exit(1)
 
     data, _ = frontmatter.read(skill_md_path.read_text())
     try:
         skill = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        rprint(f"[red]Error:[/red] Malformed SKILL.md: {exc}")
+        err_console.print(f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}")
         raise typer.Exit(1) from None
 
     if skill.mysk is None or not skill.mysk.provenance.is_imported:
-        rprint(
-            f"[red]Error:[/red] {name!r} is self-authored. "
+        err_console.print(
+            f"[red]Error:[/red] {escape(repr(name))} is self-authored. "
             "Only imported skills (with a source URL) can be refreshed."
         )
         raise typer.Exit(1)
 
     if skill.mysk.provenance.modified:
-        rprint(
-            f"[red]Error:[/red] {name!r} has local changes (modified: true). "
-            "Reset modified to false before refreshing."
+        err_console.print(
+            f"[red]Error:[/red] {escape(repr(name))} has local changes "
+            "(modified: true). Reset modified to false before refreshing."
         )
         raise typer.Exit(1)
 
@@ -129,7 +135,10 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     try:
         import_url = ImportUrl.parse(source)
     except ValueError as exc:
-        rprint(f"[red]Error:[/red] Cannot parse source URL {source!r}: {exc}")
+        err_console.print(
+            f"[red]Error:[/red] Cannot parse source URL "
+            f"{escape(repr(source))}: {escape(str(exc))}"
+        )
         raise typer.Exit(1) from None
 
     local_dir = library / name
@@ -139,19 +148,21 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
         try:
             download_skill(import_url, tmp_skill_dir)
         except DownloadError as exc:
-            rprint(f"[red]Error:[/red] {exc}")
+            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
             raise typer.Exit(1) from None
 
         upstream_skill_md = tmp_skill_dir / "SKILL.md"
         if not upstream_skill_md.exists():
-            rprint("[red]Error:[/red] Downloaded skill has no SKILL.md.")
+            err_console.print("[red]Error:[/red] Downloaded skill has no SKILL.md.")
             raise typer.Exit(1)
 
         upstream_data, upstream_body = frontmatter.read(upstream_skill_md.read_text())
         try:
             upstream_skill = Skill.from_frontmatter(upstream_data)
         except (ValueError, KeyError) as exc:
-            rprint(f"[red]Error:[/red] Malformed upstream SKILL.md: {exc}")
+            err_console.print(
+                f"[red]Error:[/red] Malformed upstream SKILL.md: {escape(str(exc))}"
+            )
             raise typer.Exit(1) from None
 
         refreshed = Skill(
@@ -165,19 +176,19 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
         (tmp_skill_dir / "SKILL.md").write_text(new_skill_md)
 
         if _dirs_are_identical(local_dir, tmp_skill_dir):
-            rprint(f"No changes — {name!r} is already up to date.")
+            console.print(f"No changes — {escape(repr(name))} is already up to date.")
             return
 
         if not confirm(
             f"Refresh {name!r}? This will overwrite its local content.", yes=yes
         ):
-            rprint(f"Aborted refresh of {name!r}.")
+            console.print(f"Aborted refresh of {escape(repr(name))}.")
             return
 
         shutil.rmtree(local_dir)
         shutil.copytree(tmp_skill_dir, local_dir)
 
-    rprint(f"Refreshed {name!r}.")
+    console.print(f"Refreshed {escape(repr(name))}.")
 
 
 def _dirs_are_identical(a: Path, b: Path) -> bool:

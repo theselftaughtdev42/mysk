@@ -6,6 +6,7 @@ from pathlib import Path
 import questionary
 import typer
 
+from mysk.console import console, err_console
 from mysk.domain.naming import validate_skill_name
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
@@ -43,21 +44,23 @@ def _delete_unrecognized_by_name(name: str, library: Path, *, yes: bool) -> None
     try:
         validate_skill_name(name)
     except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        err_console.print(f"Error: {exc}", markup=False)
         raise typer.Exit(1) from None
 
     skill_dir = library / name
     if not skill_dir.is_dir():
-        typer.echo(f"Skill '{name}' not found in the Skill Library.")
+        err_console.print(
+            f"Skill '{name}' not found in the Skill Library.", markup=False
+        )
         raise typer.Exit(1)
 
     message = f"Delete '{name}' from the Skill Library and all Deployment Targets?"
     if not confirm(message, yes=yes):
-        typer.echo("Aborted.")
+        console.print("Aborted.", markup=False)
         raise typer.Exit(0)
 
     _delete_from_disk(name, skill_dir, library)
-    typer.echo(f"Deleted '{name}'.")
+    console.print(f"Deleted '{name}'.", markup=False)
 
 
 @app.callback()
@@ -88,7 +91,7 @@ def delete_skill(
         if name is not None and bulk is None and not select_all:
             _delete_unrecognized_by_name(name, library, yes=yes)
             return
-        typer.echo(str(exc))
+        err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
     if selected is None:
@@ -98,14 +101,15 @@ def delete_skill(
         ).ask()
 
     if not selected:
-        typer.echo("Nothing selected.")
+        console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
     modified = {r.skill.name for r in selected if r.mysk.provenance.modified}
     for skill_name in modified:
-        typer.echo(
+        err_console.print(
             f"Warning: '{skill_name}' has local modifications "
-            "that will be permanently lost."
+            "that will be permanently lost.",
+            markup=False,
         )
 
     if len(selected) == 1:
@@ -123,9 +127,9 @@ def delete_skill(
         )
 
     if not confirm(message, yes=yes):
-        typer.echo("Aborted.")
+        console.print("Aborted.", markup=False)
         raise typer.Exit(0)
 
     for skill_result in selected:
         _delete_from_disk(skill_result.skill.name, skill_result.dir, library)
-        typer.echo(f"Deleted '{skill_result.skill.name}'.")
+        console.print(f"Deleted '{skill_result.skill.name}'.", markup=False)

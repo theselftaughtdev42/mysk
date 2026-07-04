@@ -3,6 +3,7 @@
 import questionary
 import typer
 
+from mysk.console import console, err_console
 from mysk.domain.lifecycle import LifecycleState
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import load_skills, skill_library
@@ -40,7 +41,7 @@ def cleanup(
     deprecated = [r for r in installed if r.mysk.state == LifecycleState.DEPRECATED]
 
     if not deprecated:
-        typer.echo("Nothing to clean up.")
+        console.print("Nothing to clean up.", markup=False)
         raise typer.Exit(0)
 
     try:
@@ -48,7 +49,7 @@ def cleanup(
             skill=None, bulk=bulk, select_all=select_all, eligible=deprecated
         )
     except SkillSelectionError as exc:
-        typer.echo(str(exc))
+        err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
     if selected_skills is None:
@@ -58,7 +59,7 @@ def cleanup(
         ).ask()
 
     if not selected_skills:
-        typer.echo("Nothing selected.")
+        console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
     targets = discover_targets()
@@ -73,11 +74,11 @@ def cleanup(
         raise typer.Exit(0)
 
     for target in targets:
-        typer.echo(f"\n{target.name}:")
+        console.print(f"\n{target.name}:", markup=False)
         for skill_result in selected_skills:
             target_path = target.path / skill_result.skill.name
             result = remove_skill(target_path, skill_library_path=library)
             line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            typer.echo(line)
+            console.print(line, markup=False)

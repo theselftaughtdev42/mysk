@@ -2,6 +2,7 @@
 
 import typer
 
+from mysk.console import console
 from mysk.io.skills import skill_library_path
 
 app = typer.Typer(
@@ -12,4 +13,4 @@ app = typer.Typer(
 @app.callback()
 def library_cmd() -> None:
     """Print the Skill Library filepath."""
-    typer.echo(skill_library_path())
+    console.print(skill_library_path(), markup=False, soft_wrap=True)

@@ -195,6 +195,24 @@ def test_noninteractive_errors_for_modified_on_self_authored(monkeypatch, tmp_pa
     assert "self-authored" in result.output.lower()
 
 
+def test_error_goes_to_stderr(monkeypatch, tmp_path):
+    _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
+    result = _run(
+        monkeypatch, tmp_path, extra_args=("foo", "--key", "bogus", "--value", "active")
+    )
+    assert "unknown key" in result.stderr.lower()
+
+
+def test_success_confirmation_goes_to_stdout(monkeypatch, tmp_path):
+    _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        extra_args=("foo", "--key", "status", "--value", "experimental"),
+    )
+    assert "marked" in result.stdout.lower()
+
+
 def test_interactive_exits_cleanly_when_no_skills_selected(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
     result = _run(monkeypatch, tmp_path, questionary_stub=QuestionaryStub([]))

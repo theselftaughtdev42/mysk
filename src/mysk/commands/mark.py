@@ -1,14 +1,13 @@
 """Command to interactively set markings (state, modified, etc) on skills."""
 
-import sys
 from pathlib import Path
 from typing import Annotated
 
 import questionary
 import typer
-from rich import print as rprint
 from rich.markup import escape
 
+from mysk.console import console, err_console
 from mysk.domain import LifecycleState, Skill
 from mysk.io import frontmatter
 from mysk.io.skills import InstalledSkill, SkillLoadError, load_skills, skill_library
@@ -86,7 +85,7 @@ def _apply_marking(skill_path: Path, *, value: LifecycleState | bool) -> str | N
 
 def _validate_key(key: str) -> None:
     if key not in _VALID_KEYS:
-        rprint(f"[red]Unknown key: {escape(key)}[/red]", file=sys.stderr)
+        err_console.print(f"[red]Unknown key: {escape(key)}[/red]")
         raise typer.Exit(1)
 
 
@@ -95,14 +94,13 @@ def _resolve_value(key: str, value: str) -> LifecycleState | bool:
         try:
             return LifecycleState(value.lower())
         except ValueError as e:
-            rprint(f"[red]Unknown status: {escape(value)}[/red]", file=sys.stderr)
+            err_console.print(f"[red]Unknown status: {escape(value)}[/red]")
             raise typer.Exit(1) from e
     lower = value.lower()
     if lower not in ("true", "false"):
-        rprint(
+        err_console.print(
             f"[red]Invalid value for modified: {escape(value)}"
-            " — must be true or false.[/red]",
-            file=sys.stderr,
+            " — must be true or false.[/red]"
         )
         raise typer.Exit(1)
     return lower == "true"
@@ -117,20 +115,18 @@ def _report_selection_error(
     errors: list[SkillLoadError],
 ) -> None:
     if skill_name is None or bulk is not None or select_all:
-        rprint(f"[red]Error:[/red] {exc}", file=sys.stderr)
+        err_console.print(f"[red]Error:[/red] {exc}")
         return
     error_match = next((e for e in errors if e.path.parent.name == skill_name), None)
     if error_match is None:
-        rprint(
-            f"[red]{escape(skill_name)} not found in the Skill Library.[/red]",
-            file=sys.stderr,
+        err_console.print(
+            f"[red]{escape(skill_name)} not found in the Skill Library.[/red]"
         )
     else:
-        rprint(
+        err_console.print(
             f"[red]{escape(skill_name)} is not a valid skill"
             f" — {error_match.schema_error}."
-            " Use mysk import to add skills to the library.[/red]",
-            file=sys.stderr,
+            " Use mysk import to add skills to the library.[/red]"
         )
 
 
@@ -140,7 +136,7 @@ def _resolve_selection(
     if selected is not None:
         return selected
     if not installed:
-        rprint("[dim]No skills in the Skill Library to mark.[/dim]")
+        console.print("[dim]No skills in the Skill Library to mark.[/dim]")
         raise typer.Exit(0)
     choices = build_skill_choices(installed, relevance=lambda _: None)
     chosen = questionary.checkbox("Select skills to mark:\n", choices=choices).ask()
@@ -163,11 +159,11 @@ def _apply_and_report(
             warnings.append(warning)
 
     if skill_name is not None and warnings:
-        rprint(warnings[0], file=sys.stderr)
+        err_console.print(warnings[0])
         raise typer.Exit(1)
 
     for warning in warnings:
-        rprint(warning)
+        console.print(warning)
 
     display = (
         chosen_value.value
@@ -176,13 +172,13 @@ def _apply_and_report(
     )
 
     if len(selected) == 1:
-        rprint(
+        console.print(
             f"[green]Marked {escape(selected[0].skill.name)}: "
             f"{escape(chosen_key)} = {escape(display)}.[/green]"
         )
     else:
         names = ", ".join(escape(r.skill.name) for r in selected)
-        rprint(
+        console.print(
             f"[green][bold]{names}[/bold] marked: "
             f"{escape(chosen_key)}={escape(display)}.[/green]"
         )
