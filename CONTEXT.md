@@ -24,8 +24,12 @@ _Avoid_: pattern, spine, flow
 The set of skills a Skill Operation resolves to act on, via `<skill>`, `--bulk`, `--all`, or the interactive picker. Distinct from Deployment Target, which is *where* an operation acts, not *what* it acts on.
 _Avoid_: target, scope
 
+**mysk home**:
+The single directory that holds everything mysk owns on disk, located at `~/.mysk` and overridable via the `MYSK_HOME` environment variable. See ADR-0005.
+_Avoid_: data dir, app support dir, mysk folder
+
 **Skill Library**:
-The canonical local directory where all skills are stored, located at `platformdirs.user_data_dir("mysk") / "skills"`. Overridable via the `MYSK_SKILLS_DIR` environment variable. All mysk commands read from and write to the Skill Library; it is independent of any source repository. See ADR-0005.
+The canonical local directory where all 'mysk-owned' skills are stored, located at `$MYSK_HOME/skills`. All mysk commands read from and write to the Skill Library.
 _Avoid_: skills directory, skills folder, source repo
 
 **Deploy**:

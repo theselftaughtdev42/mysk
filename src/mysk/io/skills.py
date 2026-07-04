@@ -4,8 +4,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from platformdirs import user_data_dir
-
 from mysk.domain.mysk_block import MyskBlock
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
@@ -33,25 +31,31 @@ class SkillLoadError:
     schema_error: str
 
 
+def _mysk_home() -> Path:
+    """Resolve the mysk home directory: `$MYSK_HOME` or `~/.mysk` by default.
+
+    A set `MYSK_HOME` has `~` expanded and any relative path resolved against
+    the current working directory; an empty or unset value falls back to
+    `~/.mysk`.
+    """
+    override = os.environ.get("MYSK_HOME")
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path.home() / ".mysk"
+
+
 def skill_library_path() -> Path:
     """Resolve the Skill Library path without creating it."""
-    override = os.environ.get("MYSK_SKILLS_DIR")
-    if override:
-        return Path(override).expanduser()
-    return Path(user_data_dir("mysk")) / "skills"
+    return _mysk_home() / "skills"
 
 
 def skill_library() -> Path:
     """Resolve the Skill Library directory, creating it if absent.
 
-    Returns `platformdirs.user_data_dir("mysk") / "skills"` by default, or the
-    `MYSK_SKILLS_DIR` path when that environment variable is set.
+    Returns `<mysk home>/skills`, where the mysk home is `~/.mysk` by default
+    or the `MYSK_HOME` path when that environment variable is set.
     """
-    override = os.environ.get("MYSK_SKILLS_DIR")
-    if override:
-        library = Path(override).expanduser()
-    else:
-        library = Path(user_data_dir("mysk")) / "skills"
+    library = skill_library_path()
     library.mkdir(parents=True, exist_ok=True)
     return library
 

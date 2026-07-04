@@ -24,7 +24,7 @@ app = typer.Typer(
 def _delete_from_disk(name: str, skill_dir: Path, library: Path) -> None:
     for target in discover_targets():
         target_path = target.path / name
-        # resolve() both sides: MYSK_SKILLS_DIR may be a symlink
+        # resolve() both sides: the Skill Library path may be a symlink
         # (e.g. /var → /private/var on macOS).
         if target_path.is_symlink() and target_path.resolve().is_relative_to(
             library.resolve()

@@ -12,6 +12,20 @@ from mysk.io.skills import InstalledSkill
 from mysk.io.targets import Target
 
 
+@pytest.fixture
+def library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point mysk at a temporary mysk home; return its Skill Library path.
+
+    Sets `MYSK_HOME` to a temp directory so every command resolves the Skill
+    Library to `<tmp>/skills`, and returns that (created) path for tests to read
+    from and write to.
+    """
+    monkeypatch.setenv("MYSK_HOME", str(tmp_path))
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    return skills
+
+
 def make_target(name: str, path: str | None = None) -> Target:
     """Build a Target; defaults to the conventional `/home/user/.<name>/skills`."""
     return Target(name=name, path=Path(path or f"/home/user/.{name}/skills"))

@@ -19,8 +19,7 @@ _UPSTREAM_SKILL_MD = (
 )
 
 
-def _run(monkeypatch, tmp_path, extra_args=(), confirm_fn=None, questionary_stub=None):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def _run(monkeypatch, extra_args=(), confirm_fn=None, questionary_stub=None):
     monkeypatch.setattr(
         refresh_cmd,
         "confirm",
@@ -73,21 +72,21 @@ def _self_authored_skill_md(name: str = "my-skill", description: str = "mine") -
 # --- 1. No arguments: interactive picker ------------------------------------
 
 
-def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, tmp_path):
-    (tmp_path / "self").mkdir()
-    (tmp_path / "self" / "SKILL.md").write_text(
+def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, library):
+    (library / "self").mkdir()
+    (library / "self" / "SKILL.md").write_text(
         _self_authored_skill_md(name="self", description="self-authored")
     )
-    (tmp_path / "dirty").mkdir()
-    (tmp_path / "dirty" / "SKILL.md").write_text(
+    (library / "dirty").mkdir()
+    (library / "dirty" / "SKILL.md").write_text(
         _installed_skill_md(
             name="dirty",
             source="https://github.com/alice/cool-skills/tree/main/skills/dirty",
             modified=True,
         )
     )
-    (tmp_path / "clean").mkdir()
-    (tmp_path / "clean" / "SKILL.md").write_text(
+    (library / "clean").mkdir()
+    (library / "clean" / "SKILL.md").write_text(
         _installed_skill_md(
             name="clean",
             source="https://github.com/alice/cool-skills/tree/main/skills/clean",
@@ -96,7 +95,7 @@ def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, tmp_pat
 
     stub = QuestionaryStub([])
 
-    result = _run(monkeypatch, tmp_path, questionary_stub=stub)
+    result = _run(monkeypatch, questionary_stub=stub)
 
     assert result.exit_code == 0
     reasons = {c.value.dir.name: c.disabled for c in stub.choices_for("refresh")}
@@ -105,19 +104,19 @@ def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, tmp_pat
     assert reasons["clean"] is None
 
 
-def test_refresh_no_args_nothing_selected_exits_cleanly(monkeypatch, tmp_path):
-    (tmp_path / "clean").mkdir()
-    (tmp_path / "clean" / "SKILL.md").write_text(_installed_skill_md(name="clean"))
+def test_refresh_no_args_nothing_selected_exits_cleanly(monkeypatch, library):
+    (library / "clean").mkdir()
+    (library / "clean" / "SKILL.md").write_text(_installed_skill_md(name="clean"))
 
-    result = _run(monkeypatch, tmp_path, questionary_stub=QuestionaryStub([]))
+    result = _run(monkeypatch, questionary_stub=QuestionaryStub([]))
 
     assert result.exit_code == 0
     assert "Nothing selected." in result.output
 
 
 @respx.mock
-def test_refresh_no_args_picker_refreshes_selected_skill(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_no_args_picker_refreshes_selected_skill(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -132,7 +131,7 @@ def test_refresh_no_args_picker_refreshes_selected_skill(monkeypatch, tmp_path):
 
     stub = QuestionaryStub(lambda choices: [choices[0].value])
 
-    result = _run(monkeypatch, tmp_path, questionary_stub=stub)
+    result = _run(monkeypatch, questionary_stub=stub)
 
     assert result.exit_code == 0, result.output
     assert "Refreshed" in result.output
@@ -141,8 +140,8 @@ def test_refresh_no_args_picker_refreshes_selected_skill(monkeypatch, tmp_path):
 # --- 2. Skill not found -----------------------------------------------------
 
 
-def test_refresh_skill_not_found(monkeypatch, tmp_path):
-    result = _run(monkeypatch, tmp_path, extra_args=["no-such-skill"])
+def test_refresh_skill_not_found(monkeypatch, library):
+    result = _run(monkeypatch, extra_args=["no-such-skill"])
 
     assert result.exit_code != 0
     assert "no-such-skill" in result.output
@@ -151,12 +150,12 @@ def test_refresh_skill_not_found(monkeypatch, tmp_path):
 # --- 3. Self-authored skill (no source) -------------------------------------
 
 
-def test_refresh_self_authored_skill_errors(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_self_authored_skill_errors(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_self_authored_skill_md())
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
     assert "imported" in result.output.lower()
@@ -165,12 +164,12 @@ def test_refresh_self_authored_skill_errors(monkeypatch, tmp_path):
 # --- 4. modified: true guard ------------------------------------------------
 
 
-def test_refresh_modified_true_errors(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_modified_true_errors(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md(modified=True))
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
     assert "modified" in result.output.lower()
@@ -180,8 +179,8 @@ def test_refresh_modified_true_errors(monkeypatch, tmp_path):
 
 
 @respx.mock
-def test_refresh_clean_updates_skill_directory(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_clean_updates_skill_directory(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -194,10 +193,10 @@ def test_refresh_clean_updates_skill_directory(monkeypatch, tmp_path):
         )
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code == 0, result.output
-    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    text = (library / "my-skill" / "SKILL.md").read_text()
     assert "description: improved description" in text
     assert "state: active" in text
     assert f"source: {_SOURCE_URL}" in text
@@ -208,8 +207,8 @@ def test_refresh_clean_updates_skill_directory(monkeypatch, tmp_path):
 
 
 @respx.mock
-def test_refresh_upstream_name_writes_to_local_dir(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "local-name"
+def test_refresh_upstream_name_writes_to_local_dir(monkeypatch, library):
+    skill_dir = library / "local-name"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
         _installed_skill_md(name="local-name", upstream_name="my-skill")
@@ -224,12 +223,12 @@ def test_refresh_upstream_name_writes_to_local_dir(monkeypatch, tmp_path):
         )
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["local-name"])
+    result = _run(monkeypatch, extra_args=["local-name"])
 
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "local-name" / "SKILL.md").exists()
-    assert not (tmp_path / "my-skill").exists()
-    text = (tmp_path / "local-name" / "SKILL.md").read_text()
+    assert (library / "local-name" / "SKILL.md").exists()
+    assert not (library / "my-skill").exists()
+    text = (library / "local-name" / "SKILL.md").read_text()
     assert "name: local-name" in text
     assert "description: upstream improved" in text
     assert "upstream_name: my-skill" in text
@@ -239,8 +238,8 @@ def test_refresh_upstream_name_writes_to_local_dir(monkeypatch, tmp_path):
 
 
 @respx.mock
-def test_refresh_no_changes_skips_write_and_confirmation(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_no_changes_skips_write_and_confirmation(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -250,7 +249,7 @@ def test_refresh_no_changes_skips_write_and_confirmation(monkeypatch, tmp_path):
         )
     )
 
-    mtime_before = (tmp_path / "my-skill" / "SKILL.md").stat().st_mtime
+    mtime_before = (library / "my-skill" / "SKILL.md").stat().st_mtime
 
     confirm_calls = []
 
@@ -258,11 +257,11 @@ def test_refresh_no_changes_skips_write_and_confirmation(monkeypatch, tmp_path):
         confirm_calls.append(yes)
         return True
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"], confirm_fn=confirm_fn)
+    result = _run(monkeypatch, extra_args=["my-skill"], confirm_fn=confirm_fn)
 
     assert result.exit_code == 0, result.output
     assert "no changes" in result.output.lower()
-    assert (tmp_path / "my-skill" / "SKILL.md").stat().st_mtime == mtime_before
+    assert (library / "my-skill" / "SKILL.md").stat().st_mtime == mtime_before
     assert confirm_calls == []
 
 
@@ -270,8 +269,8 @@ def test_refresh_no_changes_skips_write_and_confirmation(monkeypatch, tmp_path):
 
 
 @respx.mock
-def test_refresh_declined_confirmation_leaves_content_unchanged(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_declined_confirmation_leaves_content_unchanged(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -286,20 +285,19 @@ def test_refresh_declined_confirmation_leaves_content_unchanged(monkeypatch, tmp
 
     result = _run(
         monkeypatch,
-        tmp_path,
         extra_args=["my-skill"],
         confirm_fn=lambda message, *, yes: False,
     )
 
     assert result.exit_code == 0, result.output
     assert "aborted" in result.output.lower()
-    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    text = (library / "my-skill" / "SKILL.md").read_text()
     assert "description: does cool things" in text
 
 
 @respx.mock
-def test_refresh_yes_flag_skips_confirmation(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_yes_flag_skips_confirmation(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -320,33 +318,32 @@ def test_refresh_yes_flag_skips_confirmation(monkeypatch, tmp_path):
 
     result = _run(
         monkeypatch,
-        tmp_path,
         extra_args=["my-skill", "--yes"],
         confirm_fn=confirm_fn,
     )
 
     assert result.exit_code == 0, result.output
     assert confirm_calls == [True]
-    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    text = (library / "my-skill" / "SKILL.md").read_text()
     assert "description: improved description" in text
 
 
 # --- 9. --all flag -----------------------------------------------------------
 
 
-def test_refresh_all_and_name_errors(monkeypatch, tmp_path):
-    result = _run(monkeypatch, tmp_path, extra_args=["--all", "my-skill"])
+def test_refresh_all_and_name_errors(monkeypatch, library):
+    result = _run(monkeypatch, extra_args=["--all", "my-skill"])
 
     assert result.exit_code != 0
     assert "mutually exclusive" in result.output
 
 
-def test_refresh_all_no_imported_skills(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_all_no_imported_skills(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_self_authored_skill_md())
 
-    result = _run(monkeypatch, tmp_path, extra_args=["--all"])
+    result = _run(monkeypatch, extra_args=["--all"])
 
     assert result.exit_code == 0
     assert "no imported" in result.output.lower()
@@ -357,13 +354,13 @@ _SOURCE_URL_B = "https://github.com/alice/cool-skills/tree/main/skills/skill-b"
 
 
 @respx.mock
-def test_refresh_all_clean_path(monkeypatch, tmp_path):
-    (tmp_path / "skill-a").mkdir()
-    (tmp_path / "skill-a" / "SKILL.md").write_text(
+def test_refresh_all_clean_path(monkeypatch, library):
+    (library / "skill-a").mkdir()
+    (library / "skill-a" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-a", source=_SOURCE_URL_A)
     )
-    (tmp_path / "skill-b").mkdir()
-    (tmp_path / "skill-b" / "SKILL.md").write_text(
+    (library / "skill-b").mkdir()
+    (library / "skill-b" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-b", source=_SOURCE_URL_B)
     )
 
@@ -376,55 +373,55 @@ def test_refresh_all_clean_path(monkeypatch, tmp_path):
         ]
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["--all"])
+    result = _run(monkeypatch, extra_args=["--all"])
 
     assert result.exit_code == 0, result.output
-    assert "description: improved a" in (tmp_path / "skill-a" / "SKILL.md").read_text()
-    assert "description: improved b" in (tmp_path / "skill-b" / "SKILL.md").read_text()
+    assert "description: improved a" in (library / "skill-a" / "SKILL.md").read_text()
+    assert "description: improved b" in (library / "skill-b" / "SKILL.md").read_text()
 
 
 @respx.mock
-def test_refresh_malformed_skill_md_exits_with_error(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_malformed_skill_md_exits_with_error(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: d\nmysk:\n  source: https://example.com\n---\n"
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
     assert "malformed" in result.output.lower()
 
 
-def test_refresh_unparseable_source_url_exits_with_error(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_unparseable_source_url_exits_with_error(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: d\nmysk:\n  state: active\n"
         "  source: not-a-valid-github-url\n  modified: false\n---\n"
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
 
 
 @respx.mock
-def test_refresh_download_error_exits_with_error(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_download_error_exits_with_error(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
     respx.get(_TARBALL_URL).mock(return_value=httpx.Response(500))
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
 
 
 @respx.mock
-def test_refresh_missing_upstream_skill_md_exits_with_error(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_missing_upstream_skill_md_exits_with_error(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -438,15 +435,15 @@ def test_refresh_missing_upstream_skill_md_exits_with_error(monkeypatch, tmp_pat
         return_value=httpx.Response(200, content=buf.getvalue())
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
     assert "SKILL.md" in result.output
 
 
 @respx.mock
-def test_refresh_malformed_upstream_skill_md_exits_with_error(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_malformed_upstream_skill_md_exits_with_error(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -459,7 +456,7 @@ def test_refresh_malformed_upstream_skill_md_exits_with_error(monkeypatch, tmp_p
         )
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
     assert "malformed" in result.output.lower()
@@ -467,9 +464,9 @@ def test_refresh_malformed_upstream_skill_md_exits_with_error(monkeypatch, tmp_p
 
 @respx.mock
 def test_refresh_updates_and_removes_extra_local_files_when_file_sets_differ(
-    monkeypatch, tmp_path
+    monkeypatch, library
 ):
-    skill_dir = tmp_path / "my-skill"
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
     (skill_dir / "extra.py").write_text("# extra file only in local copy\n")
@@ -480,16 +477,16 @@ def test_refresh_updates_and_removes_extra_local_files_when_file_sets_differ(
         )
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code == 0, result.output
-    assert not (tmp_path / "my-skill" / "extra.py").exists()
-    assert (tmp_path / "my-skill" / "SKILL.md").exists()
+    assert not (library / "my-skill" / "extra.py").exists()
+    assert (library / "my-skill" / "SKILL.md").exists()
 
 
 @respx.mock
-def test_refresh_takes_extra_fields_from_upstream(monkeypatch, tmp_path):
-    skill_dir = tmp_path / "my-skill"
+def test_refresh_takes_extra_fields_from_upstream(monkeypatch, library):
+    skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
 
@@ -503,24 +500,24 @@ def test_refresh_takes_extra_fields_from_upstream(monkeypatch, tmp_path):
         )
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["my-skill"])
+    result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code == 0, result.output
-    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    text = (library / "my-skill" / "SKILL.md").read_text()
     assert "license: Apache-2.0" in text
 
 
 @respx.mock
-def test_refresh_all_mixed_modified(monkeypatch, tmp_path):
+def test_refresh_all_mixed_modified(monkeypatch, library):
     _source_clean = "https://github.com/alice/cool-skills/tree/main/skills/skill-clean"
     _source_dirty = "https://github.com/alice/cool-skills/tree/main/skills/skill-dirty"
 
-    (tmp_path / "skill-clean").mkdir()
-    (tmp_path / "skill-clean" / "SKILL.md").write_text(
+    (library / "skill-clean").mkdir()
+    (library / "skill-clean" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-clean", source=_source_clean)
     )
-    (tmp_path / "skill-dirty").mkdir()
-    (tmp_path / "skill-dirty" / "SKILL.md").write_text(
+    (library / "skill-dirty").mkdir()
+    (library / "skill-dirty" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-dirty", source=_source_dirty, modified=True)
     )
 
@@ -533,12 +530,12 @@ def test_refresh_all_mixed_modified(monkeypatch, tmp_path):
         )
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["--all"])
+    result = _run(monkeypatch, extra_args=["--all"])
 
     assert result.exit_code == 0, result.output
     assert (
         "description: updated clean"
-        in (tmp_path / "skill-clean" / "SKILL.md").read_text()
+        in (library / "skill-clean" / "SKILL.md").read_text()
     )
     assert "needs review" in result.output.lower()
     assert "skill-dirty" in result.output
@@ -548,13 +545,13 @@ def test_refresh_all_mixed_modified(monkeypatch, tmp_path):
 
 
 @respx.mock
-def test_refresh_bulk_flag_refreshes_named_subset_without_picker(monkeypatch, tmp_path):
-    (tmp_path / "skill-a").mkdir()
-    (tmp_path / "skill-a" / "SKILL.md").write_text(
+def test_refresh_bulk_flag_refreshes_named_subset_without_picker(monkeypatch, library):
+    (library / "skill-a").mkdir()
+    (library / "skill-a" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-a", source=_SOURCE_URL_A)
     )
-    (tmp_path / "skill-b").mkdir()
-    (tmp_path / "skill-b" / "SKILL.md").write_text(
+    (library / "skill-b").mkdir()
+    (library / "skill-b" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-b", source=_SOURCE_URL_B)
     )
 
@@ -569,51 +566,50 @@ def test_refresh_bulk_flag_refreshes_named_subset_without_picker(monkeypatch, tm
 
     result = _run(
         monkeypatch,
-        tmp_path,
         extra_args=["--bulk", "skill-a"],
         questionary_stub=stub,
     )
 
     assert result.exit_code == 0, result.output
     assert stub.prompted_messages() == []
-    assert "description: improved a" in (tmp_path / "skill-a" / "SKILL.md").read_text()
+    assert "description: improved a" in (library / "skill-a" / "SKILL.md").read_text()
     assert (
         "description: does cool things"
-        in (tmp_path / "skill-b" / "SKILL.md").read_text()
+        in (library / "skill-b" / "SKILL.md").read_text()
     )
 
 
-def test_refresh_bulk_unknown_skill_errors(monkeypatch, tmp_path):
-    (tmp_path / "skill-a").mkdir()
-    (tmp_path / "skill-a" / "SKILL.md").write_text(
+def test_refresh_bulk_unknown_skill_errors(monkeypatch, library):
+    (library / "skill-a").mkdir()
+    (library / "skill-a" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-a", source=_SOURCE_URL_A)
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["--bulk", "ghost"])
+    result = _run(monkeypatch, extra_args=["--bulk", "ghost"])
 
     assert result.exit_code == 1
     assert "ghost" in result.output
 
 
-def test_refresh_bulk_self_authored_skill_name_errors(monkeypatch, tmp_path):
-    (tmp_path / "self").mkdir()
-    (tmp_path / "self" / "SKILL.md").write_text(_self_authored_skill_md(name="self"))
+def test_refresh_bulk_self_authored_skill_name_errors(monkeypatch, library):
+    (library / "self").mkdir()
+    (library / "self" / "SKILL.md").write_text(_self_authored_skill_md(name="self"))
 
-    result = _run(monkeypatch, tmp_path, extra_args=["--bulk", "self"])
+    result = _run(monkeypatch, extra_args=["--bulk", "self"])
 
     assert result.exit_code == 1
     assert "self" in result.output
 
 
 def test_refresh_name_and_bulk_together_exit_with_mutual_exclusivity_error(
-    monkeypatch, tmp_path
+    monkeypatch, library
 ):
-    (tmp_path / "skill-a").mkdir()
-    (tmp_path / "skill-a" / "SKILL.md").write_text(
+    (library / "skill-a").mkdir()
+    (library / "skill-a" / "SKILL.md").write_text(
         _installed_skill_md(name="skill-a", source=_SOURCE_URL_A)
     )
 
-    result = _run(monkeypatch, tmp_path, extra_args=["skill-a", "--bulk", "skill-a"])
+    result = _run(monkeypatch, extra_args=["skill-a", "--bulk", "skill-a"])
 
     assert result.exit_code == 1
     assert "mutually exclusive" in result.output
