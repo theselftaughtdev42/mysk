@@ -58,6 +58,39 @@ def test_skill_not_found_exits_with_error(monkeypatch, tmp_path, library):
     assert "nonexistent" in result.output
 
 
+def test_not_found_error_goes_to_stderr(monkeypatch, tmp_path, library):
+    result = _run(monkeypatch, extra_args=["nonexistent"])
+
+    assert result.exit_code != 0
+    assert "not found" in result.stderr.lower()
+
+
+def test_data_loss_warning_goes_to_stderr(monkeypatch, tmp_path, library):
+    _make_skill(library, "foo", modified=True)
+
+    result = _run(
+        monkeypatch,
+        confirm_fn=_confirm(True),
+        extra_args=["foo"],
+    )
+
+    assert result.exit_code == 0
+    assert "modifications" in result.stderr.lower()
+
+
+def test_deleted_confirmation_goes_to_stdout(monkeypatch, tmp_path, library):
+    _make_skill(library, "foo")
+
+    result = _run(
+        monkeypatch,
+        confirm_fn=_confirm(True),
+        extra_args=["foo"],
+    )
+
+    assert result.exit_code == 0
+    assert "Deleted 'foo'." in result.stdout
+
+
 def test_confirmed_delete_removes_skill_from_library_and_unlinks_deployed_symlinks(
     monkeypatch, tmp_path, library
 ):

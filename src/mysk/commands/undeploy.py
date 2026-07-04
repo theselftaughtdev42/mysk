@@ -6,6 +6,7 @@ from pathlib import Path
 import questionary
 import typer
 
+from mysk.console import console, err_console
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
 from mysk.io.targets import Target, discover_targets, is_deployed
@@ -66,7 +67,7 @@ def undeploy(
             eligible=deployable,
         )
     except SkillSelectionError as exc:
-        typer.echo(str(exc))
+        err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
     if agents is not None:
@@ -74,7 +75,9 @@ def undeploy(
         known = {t.name for t in targets}
         unknown = names - known
         if unknown:
-            typer.echo(f"Unknown agent(s): {', '.join(sorted(unknown))}")
+            err_console.print(
+                f"Unknown agent(s): {', '.join(sorted(unknown))}", markup=False
+            )
             raise typer.Exit(1)
         selected_targets = [t for t in targets if t.name in names]
     else:
@@ -84,7 +87,7 @@ def undeploy(
         ).ask()
 
     if not selected_targets:
-        typer.echo("Nothing selected.")
+        console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
     if selected_skills is None:
@@ -93,7 +96,7 @@ def undeploy(
             relevance=lambda r: _not_deployed(r, selected_targets, library),
         )
         if all(choice.disabled for choice in skill_choices):
-            typer.echo("No skills deployed to the selected targets.")
+            console.print("No skills deployed to the selected targets.", markup=False)
             raise typer.Exit(0)
         selected_skills = questionary.checkbox(
             "Select skills to undeploy:\n",
@@ -101,15 +104,15 @@ def undeploy(
         ).ask()
 
     if not selected_skills:
-        typer.echo("Nothing selected.")
+        console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
     for target in selected_targets:
-        typer.echo(f"\n{target.name}:")
+        console.print(f"\n{target.name}:", markup=False)
         for skill_result in selected_skills:
             target_path = target.path / skill_result.skill.name
             result = remove_skill(target_path, skill_library_path=library)
             line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            typer.echo(line)
+            console.print(line, markup=False)

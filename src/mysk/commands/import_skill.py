@@ -7,10 +7,10 @@ from typing import Annotated
 
 import questionary
 import typer
-from rich import print as rprint
-from rich.console import Console
+from rich.markup import escape
 from rich.rule import Rule
 
+from mysk.console import console, err_console
 from mysk.domain.import_url import ImportUrl, RepoRootUrl
 from mysk.domain.lifecycle import LifecycleState
 from mysk.domain.mysk_block import MyskBlock
@@ -24,8 +24,6 @@ from mysk.io.skills import CollisionError, check_collision, skill_library
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
 )
-
-_console = Console()
 
 _LIFECYCLE_CHOICES = [
     LifecycleState.EXPERIMENTAL.value,
@@ -67,7 +65,7 @@ def _import_from_local_dir(path: Path) -> None:
     )
 
     if not skill_dirs:
-        rprint("[red]Error:[/red] No skills found in this directory.")
+        err_console.print("[red]Error:[/red] No skills found in this directory.")
         raise typer.Exit(1)
 
     selected_names = questionary.checkbox(
@@ -84,9 +82,12 @@ def _import_from_local_dir(path: Path) -> None:
     for i, name in enumerate(selected_names, 1):
         skill_dir = skill_dir_map[name]
 
-        _console.print()
-        _console.print(
-            Rule(f"[bold]{name}[/bold]  [dim]{i} of {total}[/dim]", align="left")
+        console.print()
+        console.print(
+            Rule(
+                f"[bold]{escape(name)}[/bold]  [dim]{i} of {total}[/dim]",
+                align="left",
+            )
         )
 
         local_name = _resolve_local_name(
@@ -102,14 +103,16 @@ def _import_from_local_dir(path: Path) -> None:
         try:
             local_skill = Skill.from_frontmatter(data)
         except (ValueError, KeyError) as exc:
-            rprint(f"[red]Error:[/red] Malformed SKILL.md: {exc}")
+            err_console.print(
+                f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}"
+            )
             continue
 
         if local_name == name and local_skill.name != name:
-            rprint(
-                f"[red]Error:[/red] The skill's name field {local_skill.name!r} "
-                f"does not match the directory name {name!r}. "
-                f"Fix the SKILL.md and re-import."
+            err_console.print(
+                f"[red]Error:[/red] The skill's name field "
+                f"{escape(repr(local_skill.name))} does not match the directory "
+                f"name {escape(repr(name))}. Fix the SKILL.md and re-import."
             )
             continue
 
@@ -135,26 +138,28 @@ def _import_from_local_dir(path: Path) -> None:
         )
         imported += 1
 
-    _console.print()
-    _console.print(Rule(style="dim"))
-    rprint(f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills.")
+    console.print()
+    console.print(Rule(style="dim"))
+    console.print(
+        f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills."
+    )
 
 
 def _import_from_repo_root(url: str) -> None:
     try:
         repo_root_url = RepoRootUrl.parse(url)
     except ValueError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
+        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from None
 
     try:
         skill_paths = scan_repo_for_skills(repo_root_url)
     except DownloadError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
+        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from None
 
     if not skill_paths:
-        rprint("[red]Error:[/red] No skills found in this repository.")
+        err_console.print("[red]Error:[/red] No skills found in this repository.")
         raise typer.Exit(1)
 
     selected_paths = questionary.checkbox(
@@ -172,10 +177,10 @@ def _import_from_repo_root(url: str) -> None:
         import_url = ImportUrl.parse(skill_url)
         upstream_dir_name = import_url.skill_dir_name
 
-        _console.print()
-        _console.print(
+        console.print()
+        console.print(
             Rule(
-                f"[bold]{upstream_dir_name}[/bold]  [dim]{i} of {total}[/dim]",
+                f"[bold]{escape(upstream_dir_name)}[/bold]  [dim]{i} of {total}[/dim]",
                 align="left",
             )
         )
@@ -196,9 +201,11 @@ def _import_from_repo_root(url: str) -> None:
         _import_single(import_url, skill_url, rename)
         imported += 1
 
-    _console.print()
-    _console.print(Rule(style="dim"))
-    rprint(f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills.")
+    console.print()
+    console.print(Rule(style="dim"))
+    console.print(
+        f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills."
+    )
 
 
 def _resolve_local_name(
@@ -211,19 +218,19 @@ def _resolve_local_name(
     try:
         check_collision(library, preferred, source)
     except CollisionError as exc:
-        rprint(f"[red]Collision:[/red] {exc}")
+        err_console.print(f"[red]Collision:[/red] {escape(str(exc))}")
         new_name = questionary.text(prompt).ask()
         if not new_name:
             return None
         try:
             validate_skill_name(new_name)
         except ValueError as ve:
-            rprint(f"[red]Error:[/red] {ve}")
+            err_console.print(f"[red]Error:[/red] {escape(str(ve))}")
             return None
         try:
             check_collision(library, new_name, source)
         except CollisionError as ce:
-            rprint(f"[red]Error:[/red] {ce}")
+            err_console.print(f"[red]Error:[/red] {escape(str(ce))}")
             return None
         return new_name
     return preferred
@@ -243,7 +250,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
     try:
         validate_skill_name(local_name)
     except ValueError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
+        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from None
 
     library = skill_library()
@@ -260,20 +267,21 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
 
     skill_md_path = path / "SKILL.md"
     if not skill_md_path.exists():
-        rprint("[red]Error:[/red] Skill directory has no SKILL.md.")
+        err_console.print("[red]Error:[/red] Skill directory has no SKILL.md.")
         raise typer.Exit(1)
 
     data, body = frontmatter.read(skill_md_path.read_text())
     try:
         local_skill = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        rprint(f"[red]Error:[/red] Malformed SKILL.md: {exc}")
+        err_console.print(f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}")
         raise typer.Exit(1) from None
 
     if rename is None and local_skill.name != path.name:
-        rprint(
-            f"[red]Error:[/red] The skill's name field {local_skill.name!r} "
-            f"does not match the directory name {path.name!r}. "
+        err_console.print(
+            f"[red]Error:[/red] The skill's name field "
+            f"{escape(repr(local_skill.name))} does not match the directory name "
+            f"{escape(repr(path.name))}. "
             f"Skills must satisfy the Agent Skills naming constraint."
         )
         raise typer.Exit(1)
@@ -309,7 +317,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     try:
         validate_skill_name(local_name)
     except ValueError as exc:
-        rprint(f"[red]Error:[/red] {exc}")
+        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from None
 
     library = skill_library()
@@ -331,25 +339,29 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
         try:
             download_skill(import_url, tmp_skill_dir)
         except DownloadError as exc:
-            rprint(f"[red]Error:[/red] {exc}")
+            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
             raise typer.Exit(1) from None
 
         skill_md_path = tmp_skill_dir / "SKILL.md"
         if not skill_md_path.exists():
-            rprint("[red]Error:[/red] Downloaded skill has no SKILL.md.")
+            err_console.print("[red]Error:[/red] Downloaded skill has no SKILL.md.")
             raise typer.Exit(1)
 
         data, body = frontmatter.read(skill_md_path.read_text())
         try:
             downloaded_skill = Skill.from_frontmatter(data)
         except (ValueError, KeyError) as exc:
-            rprint(f"[red]Error:[/red] Malformed SKILL.md in downloaded skill: {exc}")
+            err_console.print(
+                f"[red]Error:[/red] Malformed SKILL.md in downloaded skill: "
+                f"{escape(str(exc))}"
+            )
             raise typer.Exit(1) from None
 
         if downloaded_skill.name != upstream_dir_name:
-            rprint(
-                f"[red]Error:[/red] The skill's name field {downloaded_skill.name!r} "
-                f"does not match the upstream directory name {upstream_dir_name!r}. "
+            err_console.print(
+                f"[red]Error:[/red] The skill's name field "
+                f"{escape(repr(downloaded_skill.name))} does not match the upstream "
+                f"directory name {escape(repr(upstream_dir_name))}. "
                 f"Skills must satisfy the Agent Skills naming constraint."
             )
             raise typer.Exit(1)

@@ -205,6 +205,30 @@ def test_unknown_agent_name_in_agents_flag_exits_with_error(monkeypatch):
     assert "nonexistent" in result.output
 
 
+def test_unknown_agent_error_goes_to_stderr(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        extra_args=["--agents", "claude,nonexistent"],
+    )
+
+    assert "nonexistent" in result.stderr
+
+
+def test_per_target_report_goes_to_stdout(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+    )
+
+    assert "claude" in result.stdout
+    assert "foo: removed" in result.stdout
+
+
 def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     result = _run(
         monkeypatch,

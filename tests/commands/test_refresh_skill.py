@@ -147,6 +147,32 @@ def test_refresh_skill_not_found(monkeypatch, library):
     assert "no-such-skill" in result.output
 
 
+def test_refresh_error_goes_to_stderr(monkeypatch, library):
+    result = _run(monkeypatch, extra_args=["no-such-skill"])
+
+    assert "no-such-skill" in result.stderr
+
+
+@respx.mock
+def test_refresh_success_message_goes_to_stdout(monkeypatch, library):
+    skill_dir = library / "my-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(_installed_skill_md())
+
+    upstream_md = (
+        "---\nname: my-skill\ndescription: improved description\n---\n# my-skill\n"
+    )
+    respx.get(_TARBALL_URL).mock(
+        return_value=httpx.Response(
+            200, content=_make_tarball("skills/my-skill", upstream_md)
+        )
+    )
+
+    result = _run(monkeypatch, extra_args=["my-skill"])
+
+    assert "Refreshed" in result.stdout
+
+
 # --- 3. Self-authored skill (no source) -------------------------------------
 
 

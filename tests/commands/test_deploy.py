@@ -184,6 +184,45 @@ def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     assert "ghost" in result.output
 
 
+def test_unknown_agent_error_goes_to_stderr(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        extra_args=["--agents", "claude,nonexistent"],
+    )
+
+    assert "nonexistent" in result.stderr
+
+
+def test_selection_error_goes_to_stderr(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=QuestionaryStub([_CLAUDE_TARGET]),
+        extra_args=["--bulk", "foo,ghost"],
+    )
+
+    assert result.exit_code == 1
+    assert "ghost" in result.stderr
+
+
+def test_per_target_report_goes_to_stdout(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+            outcome="deployed"
+        ),
+    )
+
+    assert "claude" in result.stdout
+    assert "foo: deployed" in result.stdout
+
+
 def test_all_skills_with_mysk_block_appear_in_skill_prompt_as_name_state(monkeypatch):
     stub = QuestionaryStub([_CLAUDE_TARGET], [])
 

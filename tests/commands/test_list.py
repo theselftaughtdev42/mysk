@@ -41,6 +41,18 @@ def test_provenance_column_appears_in_list_output(monkeypatch):
     assert "Provenance" in result.output
 
 
+def test_table_goes_to_stdout(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        deployed_fn=lambda t, s, lib: True,
+    )
+
+    assert result.exit_code == 0
+    assert "foo" in result.stdout
+
+
 def test_deployed_skill_appears_in_table_with_target_label(monkeypatch):
     result = _run(
         monkeypatch,

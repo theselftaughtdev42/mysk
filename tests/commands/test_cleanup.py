@@ -173,6 +173,31 @@ def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     assert "ghost" in result.output
 
 
+def test_selection_error_goes_to_stderr(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_DEPRECATED_SKILL],
+        extra_args=["--bulk", "ghost"],
+    )
+
+    assert result.exit_code == 1
+    assert "ghost" in result.stderr
+
+
+def test_per_target_report_goes_to_stdout(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_DEPRECATED_SKILL],
+        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        extra_args=["--all"],
+    )
+
+    assert "claude" in result.stdout
+    assert "wip: removed" in result.stdout
+
+
 def test_non_deprecated_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     result = _run(
         monkeypatch,

@@ -6,6 +6,7 @@ from pathlib import Path
 import questionary
 import typer
 
+from mysk.console import console, err_console
 from mysk.io.deploy import reconcile_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
 from mysk.io.targets import Target, discover_targets
@@ -76,7 +77,7 @@ def deploy(
     deployable, _ = load_skills(library)
 
     if not deployable:
-        typer.echo("No skills in the Skill Library to deploy.")
+        console.print("No skills in the Skill Library to deploy.", markup=False)
         raise typer.Exit(0)
 
     try:
@@ -84,7 +85,7 @@ def deploy(
             skill=skill, bulk=bulk, select_all=select_all, eligible=deployable
         )
     except SkillSelectionError as exc:
-        typer.echo(str(exc))
+        err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
     if agents is not None:
@@ -92,7 +93,9 @@ def deploy(
         known = {t.name for t in targets}
         unknown = names - known
         if unknown:
-            typer.echo(f"Unknown agent(s): {', '.join(sorted(unknown))}")
+            err_console.print(
+                f"Unknown agent(s): {', '.join(sorted(unknown))}", markup=False
+            )
             raise typer.Exit(1)
         selected_targets = [t for t in targets if t.name in names]
     else:
@@ -102,7 +105,7 @@ def deploy(
         ).ask()
 
     if not selected_targets:
-        typer.echo("Nothing selected.")
+        console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
     if selected_skills is None:
@@ -111,7 +114,9 @@ def deploy(
             relevance=lambda r: _already_deployed(r, selected_targets),
         )
         if all(choice.disabled for choice in skill_choices):
-            typer.echo("All skills already deployed to selected target(s).")
+            console.print(
+                "All skills already deployed to selected target(s).", markup=False
+            )
             raise typer.Exit(0)
         selected_skills = questionary.checkbox(
             "Select skills to deploy:\n",
@@ -119,14 +124,14 @@ def deploy(
         ).ask()
 
     if not selected_skills:
-        typer.echo("Nothing selected.")
+        console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
     for target in selected_targets:
-        typer.echo(f"\n{target.name}:")
+        console.print(f"\n{target.name}:", markup=False)
         created = _ensure_target_dir(target.path)
         if created:
-            typer.echo(f"  Created {created}")
+            console.print(f"  Created {created}", markup=False)
         for skill_result in selected_skills:
             target_path = target.path / skill_result.skill.name
             destroys_real_dir = (
@@ -138,7 +143,9 @@ def deploy(
                     "Replace it?"
                 )
                 if not confirm(message, yes=yes):
-                    typer.echo(f"  {skill_result.skill.name}: skipped (declined)")
+                    console.print(
+                        f"  {skill_result.skill.name}: skipped (declined)", markup=False
+                    )
                     continue
             result = reconcile_skill(
                 skill_result.dir,
@@ -149,4 +156,4 @@ def deploy(
             line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            typer.echo(line)
+            console.print(line, markup=False)

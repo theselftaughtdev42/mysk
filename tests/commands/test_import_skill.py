@@ -588,6 +588,30 @@ def _make_local_skill_dir(
     )
 
 
+def test_error_goes_to_stderr(tmp_path, monkeypatch, library):
+    skill_src = tmp_path / "my-collection"
+    skill_src.mkdir()
+
+    result = runner.invoke(app, ["import", str(skill_src)])
+
+    assert "No skills found" in result.stderr
+
+
+def test_import_summary_and_section_rule_go_to_stdout(tmp_path, monkeypatch, library):
+    collection = tmp_path / "my-collection"
+    collection.mkdir()
+    _make_local_skill_dir(collection, "skill-a")
+
+    _mock_checkbox(["skill-a"], monkeypatch)
+    _mock_select("active", monkeypatch)
+
+    result = runner.invoke(app, ["import", str(collection)])
+
+    assert result.exit_code == 0, result.output
+    assert "Imported" in result.stdout
+    assert "skill-a" in result.stdout
+
+
 def test_import_from_local_dir_imports_selected_skills(tmp_path, monkeypatch, library):
 
     collection = tmp_path / "my-collection"
