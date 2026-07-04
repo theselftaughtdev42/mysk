@@ -58,6 +58,8 @@ def scan_repo_for_skills(url: RepoRootUrl, ref: str = "HEAD") -> list[str]:
 
 
 def _find_skill_dir(extracted: Path, skill_path: str) -> Path:
+    # GitHub tarballs nest everything under one top-level dir — descend into
+    # it to reach the skill path
     top_dirs = [d for d in extracted.iterdir() if d.is_dir()]
     if len(top_dirs) == 1:
         candidate = top_dirs[0] / skill_path

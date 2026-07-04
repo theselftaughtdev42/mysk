@@ -71,8 +71,10 @@ def deploy(
     ),
 ) -> None:
     """Deploy skills to selected Deployment Targets."""
+    # discover the available Deployment Targets
     targets = discover_targets()
 
+    # load deployable skills from the Skill Library
     library = skill_library()
     deployable, _ = load_skills(library)
 
@@ -80,6 +82,7 @@ def deploy(
         console.print("No skills in the Skill Library to deploy.", markup=False)
         raise typer.Exit(0)
 
+    # resolve the Skill Selection from CLI flags
     try:
         selected_skills = resolve_skill_selection(
             skill=skill, bulk=bulk, select_all=select_all, eligible=deployable
@@ -88,6 +91,7 @@ def deploy(
         err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
+    # resolve the Deployment Targets from --agents or an interactive prompt
     if agents is not None:
         names = {n.strip() for n in agents.split(",")}
         known = {t.name for t in targets}
@@ -108,6 +112,7 @@ def deploy(
         console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
+    # fall back to an interactive Skill Selection when no flag picked one
     if selected_skills is None:
         skill_choices = build_skill_choices(
             deployable,
@@ -127,6 +132,7 @@ def deploy(
         console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
+    # deploy each selected skill to each target
     for target in selected_targets:
         console.print(f"\n{target.name}:", markup=False)
         created = _ensure_target_dir(target.path)

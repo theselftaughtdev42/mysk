@@ -152,12 +152,14 @@ def _apply_and_report(
     chosen_key: str,
     chosen_value: LifecycleState | bool,
 ) -> None:
+    # apply the marking to each selected skill, collecting warnings
     warnings = []
     for result in selected:
         warning = _apply_marking(result.skill_md, value=chosen_value)
         if warning:
             warnings.append(warning)
 
+    # surface warnings — fatal in single-skill mode, informational in bulk
     if skill_name is not None and warnings:
         err_console.print(warnings[0])
         raise typer.Exit(1)
@@ -165,6 +167,7 @@ def _apply_and_report(
     for warning in warnings:
         console.print(warning)
 
+    # report the outcome, phrased for one skill vs many
     display = (
         chosen_value.value
         if isinstance(chosen_value, LifecycleState)
@@ -210,9 +213,11 @@ def mark_skill(
     ] = None,
 ) -> None:
     """Interactively set a marking on one or more skills."""
+    # load skills from the Skill Library
     skills_root = skill_library()
     installed, errors = load_skills(skills_root)
 
+    # resolve the Skill Selection from CLI flags
     try:
         selected = resolve_skill_selection(
             skill=skill_name, bulk=bulk, select_all=select_all, eligible=installed
@@ -227,14 +232,17 @@ def mark_skill(
         )
         raise typer.Exit(1) from None
 
+    # fall back to an interactive Skill Selection when no flag picked one
     selected = _resolve_selection(installed, selected)
 
+    # resolve which marking to set (status or modified)
     if key is None:
         chosen_key = _prompt_for_key()
     else:
         _validate_key(key)
         chosen_key = key
 
+    # resolve the value for that marking
     chosen_value = (
         _prompt_for_value(chosen_key)
         if value is None

@@ -80,9 +80,12 @@ def delete_skill(
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Delete a skill from the Skill Library and all Deployment Targets."""
+    # load skills from the Skill Library
     library = skill_library()
     installed, _ = load_skills(library)
 
+    # resolve the Skill Selection, falling back to a raw-name delete when a
+    # single named skill does not load as a valid mysk skill
     try:
         selected = resolve_skill_selection(
             skill=name, bulk=bulk, select_all=select_all, eligible=installed
@@ -94,6 +97,7 @@ def delete_skill(
         err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
+    # fall back to an interactive Skill Selection when no flag picked one
     if selected is None:
         skill_choices = build_skill_choices(installed, relevance=lambda _: None)
         selected = questionary.checkbox(
@@ -104,6 +108,7 @@ def delete_skill(
         console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
+    # warn about modified skills whose local changes will be lost
     modified = {r.skill.name for r in selected if r.mysk.provenance.modified}
     for skill_name in modified:
         err_console.print(
@@ -112,6 +117,7 @@ def delete_skill(
             markup=False,
         )
 
+    # compose the confirmation prompt for the Skill Selection
     if len(selected) == 1:
         skill_name = selected[0].skill.name
         verb = "modified skill " if skill_name in modified else ""
@@ -130,6 +136,7 @@ def delete_skill(
         console.print("Aborted.", markup=False)
         raise typer.Exit(0)
 
+    # delete each selected skill from the Skill Library and every target
     for skill_result in selected:
         _delete_from_disk(skill_result.skill.name, skill_result.dir, library)
         console.print(f"Deleted '{skill_result.skill.name}'.", markup=False)
