@@ -12,16 +12,34 @@ from mysk.io.skills import InstalledSkill
 from mysk.io.targets import Target
 
 
-@pytest.fixture
-def library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point mysk at a temporary mysk home; return its Skill Library path.
+@pytest.fixture(autouse=True)
+def mysk_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Isolate every test under a per-test temporary mysk home.
 
-    Sets `MYSK_HOME` to a temp directory so every command resolves the Skill
-    Library to `<tmp>/skills`, and returns that (created) path for tests to read
-    from and write to.
+    Runs automatically for every test, setting `MYSK_HOME` to a fresh temp
+    directory so the Skill Library resolver can never reach the real `~/.mysk`.
+    Isolation is via `MYSK_HOME` (the resolver's first-checked input), never by
+    redirecting the real `HOME`. Returns the temp mysk home path so fixtures and
+    tests that need it can derive from the single source of truth.
+
+    A test may still override `MYSK_HOME` in its body (in-body `setenv` runs
+    after this fixture); the resolver's default-fallback tests `delenv` it and
+    isolate via a redirected `HOME` to exercise the no-override branch.
     """
     monkeypatch.setenv("MYSK_HOME", str(tmp_path))
-    skills = tmp_path / "skills"
+    return tmp_path
+
+
+@pytest.fixture
+def library(mysk_home: Path) -> Path:
+    """Return the created Skill Library path under the temp mysk home.
+
+    Builds on the autouse `mysk_home` isolation rather than establishing its
+    own, so there is exactly one place that decides where the temp Skill
+    Library lives. Returns `<mysk home>/skills`, created for tests to read from
+    and write to.
+    """
+    skills = mysk_home / "skills"
     skills.mkdir()
     return skills
 
