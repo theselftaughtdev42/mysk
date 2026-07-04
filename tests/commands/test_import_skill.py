@@ -58,8 +58,7 @@ def _mock_checkbox(answers: list[str], monkeypatch):
 
 
 @respx.mock
-def test_import_downloads_skill_and_prompts_for_lifecycle(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_downloads_skill_and_prompts_for_lifecycle(library, monkeypatch):
     _mock_select("active", monkeypatch)
     respx.get(_TARBALL_URL).mock(
         return_value=httpx.Response(
@@ -70,7 +69,7 @@ def test_import_downloads_skill_and_prompts_for_lifecycle(tmp_path, monkeypatch)
     result = runner.invoke(app, ["import", _RAW_URL])
 
     assert result.exit_code == 0, result.output
-    skill_md = tmp_path / "my-skill" / "SKILL.md"
+    skill_md = library / "my-skill" / "SKILL.md"
     assert skill_md.exists()
     text = skill_md.read_text()
     assert "source: " + _RAW_URL in text
@@ -79,8 +78,7 @@ def test_import_downloads_skill_and_prompts_for_lifecycle(tmp_path, monkeypatch)
 
 
 @respx.mock
-def test_import_with_rename_stores_upstream_name(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_with_rename_stores_upstream_name(library, monkeypatch):
     _mock_select("experimental", monkeypatch)
     respx.get(_TARBALL_URL).mock(
         return_value=httpx.Response(
@@ -91,7 +89,7 @@ def test_import_with_rename_stores_upstream_name(tmp_path, monkeypatch):
     result = runner.invoke(app, ["import", _RAW_URL, "--rename", "local-name"])
 
     assert result.exit_code == 0, result.output
-    skill_md = tmp_path / "local-name" / "SKILL.md"
+    skill_md = library / "local-name" / "SKILL.md"
     assert skill_md.exists()
     text = skill_md.read_text()
     assert "name: local-name" in text
@@ -100,20 +98,18 @@ def test_import_with_rename_stores_upstream_name(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_with_rename_rejects_invalid_name(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_with_rename_rejects_invalid_name(library, monkeypatch):
 
     result = runner.invoke(app, ["import", _RAW_URL, "--rename", "MySkill"])
 
     assert result.exit_code != 0
-    assert not (tmp_path / "MySkill").exists()
-    assert not (tmp_path / "my-skill").exists()
+    assert not (library / "MySkill").exists()
+    assert not (library / "my-skill").exists()
 
 
 @respx.mock
-def test_import_with_rename_fails_on_collision_with_local_name(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
-    existing = tmp_path / "local-name"
+def test_import_with_rename_fails_on_collision_with_local_name(library, monkeypatch):
+    existing = library / "local-name"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: local-name\ndescription: already here\n"
@@ -126,8 +122,7 @@ def test_import_with_rename_fails_on_collision_with_local_name(tmp_path, monkeyp
     assert "local-name" in result.output
 
 
-def test_import_rename_requires_a_value(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_rename_requires_a_value(library, monkeypatch):
 
     result = runner.invoke(app, ["import", _RAW_URL, "--rename"])
 
@@ -135,9 +130,8 @@ def test_import_rename_requires_a_value(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_prompts_rename_on_collision(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
-    existing = tmp_path / "my-skill"
+def test_import_prompts_rename_on_collision(library, monkeypatch):
+    existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: already here\nmysk:\n  state: active\n"
@@ -154,7 +148,7 @@ def test_import_prompts_rename_on_collision(tmp_path, monkeypatch):
     result = runner.invoke(app, ["import", _RAW_URL])
 
     assert result.exit_code == 0, result.output
-    skill_md = tmp_path / "my-skill-local" / "SKILL.md"
+    skill_md = library / "my-skill-local" / "SKILL.md"
     assert skill_md.exists()
     text = skill_md.read_text()
     assert "name: my-skill-local" in text
@@ -162,9 +156,8 @@ def test_import_prompts_rename_on_collision(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_exits_when_collision_rename_blank(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
-    existing = tmp_path / "my-skill"
+def test_import_exits_when_collision_rename_blank(library, monkeypatch):
+    existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: already here\nmysk:\n  state: active\n"
@@ -175,22 +168,20 @@ def test_import_exits_when_collision_rename_blank(tmp_path, monkeypatch):
     result = runner.invoke(app, ["import", _RAW_URL])
 
     assert result.exit_code != 0
-    assert (tmp_path / "my-skill-local").exists() is False
+    assert (library / "my-skill-local").exists() is False
 
 
 @respx.mock
-def test_import_fails_on_http_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_fails_on_http_error(library, monkeypatch):
     respx.get(_TARBALL_URL).mock(return_value=httpx.Response(404))
 
     result = runner.invoke(app, ["import", _RAW_URL])
 
     assert result.exit_code != 0
-    assert not (tmp_path / "my-skill").exists()
+    assert not (library / "my-skill").exists()
 
 
-def test_import_rejects_non_github_url(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_rejects_non_github_url(library, monkeypatch):
 
     result = runner.invoke(
         app, ["import", "https://gitlab.com/a/b/tree/main/skills/foo"]
@@ -201,9 +192,8 @@ def test_import_rejects_non_github_url(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_fails_on_collision_same_source(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
-    existing_dir = tmp_path / "my-skill"
+def test_import_fails_on_collision_same_source(library, monkeypatch):
+    existing_dir = library / "my-skill"
     existing_dir.mkdir()
     (existing_dir / "SKILL.md").write_text(
         f"---\nname: my-skill\ndescription: d\nmysk:\n  state: active\n"
@@ -220,8 +210,7 @@ def test_import_fails_on_collision_same_source(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_from_repo_root_no_skills_found_errors(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_no_skills_found_errors(library, monkeypatch):
 
     root = RepoRootUrl.parse(_REPO_ROOT_URL)
     respx.get(root.trees_api_url()).mock(
@@ -237,8 +226,7 @@ def test_import_from_repo_root_no_skills_found_errors(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_from_repo_root_picks_skill_and_imports(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_picks_skill_and_imports(library, monkeypatch):
     _mock_checkbox(["my-skill"], monkeypatch)
     _mock_select("active", monkeypatch)
 
@@ -254,7 +242,7 @@ def test_import_from_repo_root_picks_skill_and_imports(tmp_path, monkeypatch):
     result = runner.invoke(app, ["import", _REPO_ROOT_URL])
 
     assert result.exit_code == 0, result.output
-    skill_md = tmp_path / "my-skill" / "SKILL.md"
+    skill_md = library / "my-skill" / "SKILL.md"
     assert skill_md.exists()
     text = skill_md.read_text()
     assert "state: active" in text
@@ -263,11 +251,8 @@ def test_import_from_repo_root_picks_skill_and_imports(tmp_path, monkeypatch):
 
 
 def test_import_from_local_path_with_rename_ignores_source_name_mismatch(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
     _mock_select("active", monkeypatch)
 
     skill_src = tmp_path / "their-skill"
@@ -283,10 +268,9 @@ def test_import_from_local_path_with_rename_ignores_source_name_mismatch(
     assert "name: my-name" in text
 
 
-def test_import_from_local_path_prompts_rename_on_collision(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_prompts_rename_on_collision(
+    tmp_path, monkeypatch, library
+):
     existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
@@ -309,11 +293,8 @@ def test_import_from_local_path_prompts_rename_on_collision(tmp_path, monkeypatc
 
 
 def test_import_from_local_path_exits_when_collision_rename_blank(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
     existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
@@ -333,11 +314,8 @@ def test_import_from_local_path_exits_when_collision_rename_blank(
 
 
 def test_import_from_local_path_with_rename_stores_skill_under_new_name(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
     _mock_select("active", monkeypatch)
 
     skill_src = tmp_path / "my-skill"
@@ -358,10 +336,9 @@ def test_import_from_local_path_with_rename_stores_skill_under_new_name(
     assert "upstream_name:" not in text
 
 
-def test_import_from_local_path_with_rename_rejects_invalid_name(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_with_rename_rejects_invalid_name(
+    tmp_path, monkeypatch, library
+):
 
     skill_src = tmp_path / "my-skill"
     skill_src.mkdir()
@@ -376,10 +353,9 @@ def test_import_from_local_path_with_rename_rejects_invalid_name(tmp_path, monke
     assert not (library / "my-skill").exists()
 
 
-def test_import_from_local_path_with_rename_fails_on_collision(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_with_rename_fails_on_collision(
+    tmp_path, monkeypatch, library
+):
 
     existing = library / "new-name"
     existing.mkdir()
@@ -398,10 +374,9 @@ def test_import_from_local_path_with_rename_fails_on_collision(tmp_path, monkeyp
     assert result.exit_code != 0
 
 
-def test_import_from_local_path_copies_skill_as_self_authored(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_copies_skill_as_self_authored(
+    tmp_path, monkeypatch, library
+):
     _mock_select("active", monkeypatch)
 
     skill_src = tmp_path / "my-skill"
@@ -420,10 +395,9 @@ def test_import_from_local_path_copies_skill_as_self_authored(tmp_path, monkeypa
     assert "source:" not in text
 
 
-def test_import_from_local_dir_errors_when_no_skills_found(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_errors_when_no_skills_found(
+    tmp_path, monkeypatch, library
+):
 
     skill_src = tmp_path / "my-collection"
     skill_src.mkdir()
@@ -435,11 +409,8 @@ def test_import_from_local_dir_errors_when_no_skills_found(tmp_path, monkeypatch
 
 
 def test_import_from_local_path_errors_when_name_mismatches_directory(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     skill_src = tmp_path / "my-skill"
     skill_src.mkdir()
@@ -453,10 +424,9 @@ def test_import_from_local_path_errors_when_name_mismatches_directory(
     assert not (library / "my-skill").exists()
 
 
-def test_import_from_local_path_errors_on_name_collision(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_errors_on_name_collision(
+    tmp_path, monkeypatch, library
+):
 
     existing = library / "my-skill"
     existing.mkdir()
@@ -492,8 +462,7 @@ def _make_multi_tarball(skills: dict[str, str]) -> bytes:
 
 
 @respx.mock
-def test_import_from_repo_root_imports_multiple_selected_skills(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_imports_multiple_selected_skills(library, monkeypatch):
     _mock_checkbox(["skill-a", "skill-b"], monkeypatch)
     _mock_select("active", monkeypatch)
 
@@ -515,13 +484,12 @@ def test_import_from_repo_root_imports_multiple_selected_skills(tmp_path, monkey
     result = runner.invoke(app, ["import", _REPO_ROOT_URL])
 
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "skill-a" / "SKILL.md").exists()
-    assert (tmp_path / "skill-b" / "SKILL.md").exists()
+    assert (library / "skill-a" / "SKILL.md").exists()
+    assert (library / "skill-b" / "SKILL.md").exists()
 
 
 @respx.mock
-def test_import_from_repo_root_left_aligns_skill_progress_header(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_left_aligns_skill_progress_header(library, monkeypatch):
     _mock_checkbox(["skill-a", "skill-b"], monkeypatch)
     _mock_select("active", monkeypatch)
 
@@ -548,10 +516,9 @@ def test_import_from_repo_root_left_aligns_skill_progress_header(tmp_path, monke
 
 
 @respx.mock
-def test_import_from_repo_root_prompts_rename_on_collision(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_prompts_rename_on_collision(library, monkeypatch):
 
-    existing = tmp_path / "my-skill"
+    existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: already here\nmysk:\n  state: active\n"
@@ -575,7 +542,7 @@ def test_import_from_repo_root_prompts_rename_on_collision(tmp_path, monkeypatch
     result = runner.invoke(app, ["import", _REPO_ROOT_URL])
 
     assert result.exit_code == 0, result.output
-    skill_md = tmp_path / "my-skill-local" / "SKILL.md"
+    skill_md = library / "my-skill-local" / "SKILL.md"
     assert skill_md.exists()
     text = skill_md.read_text()
     assert "name: my-skill-local" in text
@@ -584,10 +551,9 @@ def test_import_from_repo_root_prompts_rename_on_collision(tmp_path, monkeypatch
 
 
 @respx.mock
-def test_import_from_repo_root_skips_skill_when_rename_blank(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_skips_skill_when_rename_blank(library, monkeypatch):
 
-    existing = tmp_path / "my-skill"
+    existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: already here\nmysk:\n  state: active\n"
@@ -607,8 +573,8 @@ def test_import_from_repo_root_skips_skill_when_rename_blank(tmp_path, monkeypat
     result = runner.invoke(app, ["import", _REPO_ROOT_URL])
 
     assert result.exit_code == 0, result.output
-    assert not (tmp_path / "my-skill-v2").exists()
-    skill_md = tmp_path / "my-skill" / "SKILL.md"
+    assert not (library / "my-skill-v2").exists()
+    skill_md = library / "my-skill" / "SKILL.md"
     assert "other-repo" in skill_md.read_text()
 
 
@@ -622,10 +588,7 @@ def _make_local_skill_dir(
     )
 
 
-def test_import_from_local_dir_imports_selected_skills(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_imports_selected_skills(tmp_path, monkeypatch, library):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -645,10 +608,9 @@ def test_import_from_local_dir_imports_selected_skills(tmp_path, monkeypatch):
     assert "source:" not in text_a
 
 
-def test_import_from_local_dir_left_aligns_skill_progress_header(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_left_aligns_skill_progress_header(
+    tmp_path, monkeypatch, library
+):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -666,8 +628,7 @@ def test_import_from_local_dir_left_aligns_skill_progress_header(tmp_path, monke
 
 
 @respx.mock
-def test_import_from_repo_root_exits_on_download_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_exits_on_download_error(library, monkeypatch):
 
     root = RepoRootUrl.parse(_REPO_ROOT_URL)
     respx.get(root.trees_api_url()).mock(return_value=httpx.Response(500))
@@ -678,8 +639,7 @@ def test_import_from_repo_root_exits_on_download_error(tmp_path, monkeypatch):
 
 
 @respx.mock
-def test_import_from_repo_root_exits_when_nothing_selected(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_from_repo_root_exits_when_nothing_selected(library, monkeypatch):
     _mock_checkbox([], monkeypatch)
 
     root = RepoRootUrl.parse(_REPO_ROOT_URL)
@@ -696,11 +656,10 @@ def test_import_from_repo_root_exits_when_nothing_selected(tmp_path, monkeypatch
 
 @respx.mock
 def test_import_from_repo_root_skips_skill_when_collision_rename_is_invalid(
-    tmp_path, monkeypatch
+    library, monkeypatch
 ):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
 
-    existing = tmp_path / "my-skill"
+    existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: already here\nmysk:\n  state: active\n"
@@ -725,17 +684,16 @@ def test_import_from_repo_root_skips_skill_when_collision_rename_is_invalid(
 
 @respx.mock
 def test_import_from_repo_root_skips_skill_when_collision_rename_also_collides(
-    tmp_path, monkeypatch
+    library, monkeypatch
 ):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
 
-    existing1 = tmp_path / "my-skill"
+    existing1 = library / "my-skill"
     existing1.mkdir()
     (existing1 / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: d\nmysk:\n  state: active\n"
         "  source: https://other-repo/my-skill\n  modified: false\n---\n"
     )
-    existing2 = tmp_path / "my-skill-local"
+    existing2 = library / "my-skill-local"
     existing2.mkdir()
     (existing2 / "SKILL.md").write_text(
         "---\nname: my-skill-local\ndescription: d\nmysk:\n  state: active\n---\n"
@@ -758,11 +716,8 @@ def test_import_from_repo_root_skips_skill_when_collision_rename_also_collides(
 
 
 def test_import_from_local_path_exits_when_collision_rename_is_invalid(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     existing = library / "my-skill"
     existing.mkdir()
@@ -783,11 +738,8 @@ def test_import_from_local_path_exits_when_collision_rename_is_invalid(
 
 
 def test_import_from_local_path_exits_when_collision_rename_also_collides(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     for name in ["my-skill", "my-skill-alt"]:
         d = library / name
@@ -807,10 +759,9 @@ def test_import_from_local_path_exits_when_collision_rename_also_collides(
     assert result.exit_code != 0
 
 
-def test_import_from_local_path_exits_when_skill_md_missing(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_exits_when_skill_md_missing(
+    tmp_path, monkeypatch, library
+):
 
     skill_dir = tmp_path / "my-skill"
     skill_dir.mkdir()
@@ -819,10 +770,9 @@ def test_import_from_local_path_exits_when_skill_md_missing(tmp_path, monkeypatc
         _import_from_local_path(skill_dir)
 
 
-def test_import_from_local_path_exits_when_skill_md_is_malformed(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_exits_when_skill_md_is_malformed(
+    tmp_path, monkeypatch, library
+):
 
     skill_src = tmp_path / "my-skill"
     skill_src.mkdir()
@@ -835,11 +785,8 @@ def test_import_from_local_path_exits_when_skill_md_is_malformed(tmp_path, monke
 
 
 def test_import_from_local_path_exits_when_lifecycle_selection_cancelled(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     _mock_select(None, monkeypatch)
 
@@ -853,10 +800,9 @@ def test_import_from_local_path_exits_when_lifecycle_selection_cancelled(
 
 
 @respx.mock
-def test_import_single_exits_when_collision_rename_is_invalid(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_single_exits_when_collision_rename_is_invalid(library, monkeypatch):
 
-    existing = tmp_path / "my-skill"
+    existing = library / "my-skill"
     existing.mkdir()
     (existing / "SKILL.md").write_text(
         "---\nname: my-skill\ndescription: d\nmysk:\n  state: active\n"
@@ -871,11 +817,10 @@ def test_import_single_exits_when_collision_rename_is_invalid(tmp_path, monkeypa
 
 
 @respx.mock
-def test_import_single_exits_when_collision_rename_also_collides(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_single_exits_when_collision_rename_also_collides(library, monkeypatch):
 
     for name in ["my-skill", "my-skill-local"]:
-        d = tmp_path / name
+        d = library / name
         d.mkdir()
         (d / "SKILL.md").write_text(
             f"---\nname: {name}\ndescription: d\nmysk:\n  state: active\n---\n"
@@ -890,9 +835,8 @@ def test_import_single_exits_when_collision_rename_also_collides(tmp_path, monke
 
 @respx.mock
 def test_import_single_exits_when_downloaded_skill_has_no_skill_md(
-    tmp_path, monkeypatch
+    library, monkeypatch
 ):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -913,9 +857,8 @@ def test_import_single_exits_when_downloaded_skill_has_no_skill_md(
 
 @respx.mock
 def test_import_single_exits_when_downloaded_skill_md_is_malformed(
-    tmp_path, monkeypatch
+    library, monkeypatch
 ):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
 
     bad_md = "---\nmysk:\n  state: active\n---\n# no name or description\n"
     respx.get(_TARBALL_URL).mock(
@@ -932,9 +875,8 @@ def test_import_single_exits_when_downloaded_skill_md_is_malformed(
 
 @respx.mock
 def test_import_single_exits_when_downloaded_skill_name_mismatches_directory(
-    tmp_path, monkeypatch
+    library, monkeypatch
 ):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
 
     mismatch_md = "---\nname: different-name\ndescription: d\n---\n# different\n"
     respx.get(_TARBALL_URL).mock(
@@ -950,8 +892,7 @@ def test_import_single_exits_when_downloaded_skill_name_mismatches_directory(
 
 
 @respx.mock
-def test_import_single_exits_when_lifecycle_selection_cancelled(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_single_exits_when_lifecycle_selection_cancelled(library, monkeypatch):
 
     _mock_select(None, monkeypatch)
     respx.get(_TARBALL_URL).mock(
@@ -965,10 +906,7 @@ def test_import_single_exits_when_lifecycle_selection_cancelled(tmp_path, monkey
     assert result.exit_code != 0
 
 
-def test_import_from_local_dir_ignores_rename_flag(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_ignores_rename_flag(tmp_path, monkeypatch, library):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -984,10 +922,7 @@ def test_import_from_local_dir_ignores_rename_flag(tmp_path, monkeypatch):
     assert not (library / "ignored").exists()
 
 
-def test_import_from_local_dir_skips_name_mismatch(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_skips_name_mismatch(tmp_path, monkeypatch, library):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -1007,10 +942,9 @@ def test_import_from_local_dir_skips_name_mismatch(tmp_path, monkeypatch):
     assert "Fix the SKILL.md" in result.output
 
 
-def test_import_from_local_dir_prompts_rename_on_collision(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_prompts_rename_on_collision(
+    tmp_path, monkeypatch, library
+):
 
     existing = library / "skill-a"
     existing.mkdir()
@@ -1035,10 +969,9 @@ def test_import_from_local_dir_prompts_rename_on_collision(tmp_path, monkeypatch
     assert "state: experimental" in text
 
 
-def test_import_from_local_dir_exits_when_nothing_selected(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_exits_when_nothing_selected(
+    tmp_path, monkeypatch, library
+):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -1052,11 +985,8 @@ def test_import_from_local_dir_exits_when_nothing_selected(tmp_path, monkeypatch
 
 
 def test_import_from_local_dir_skips_skill_when_collision_rename_is_invalid(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     existing = library / "skill-a"
     existing.mkdir()
@@ -1081,11 +1011,8 @@ def test_import_from_local_dir_skips_skill_when_collision_rename_is_invalid(
 
 
 def test_import_from_local_dir_skips_skill_when_collision_rename_also_collides(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     for name in ["skill-a", "skill-a-rename"]:
         d = library / name
@@ -1109,10 +1036,7 @@ def test_import_from_local_dir_skips_skill_when_collision_rename_also_collides(
     assert (library / "skill-b" / "SKILL.md").exists()
 
 
-def test_import_from_local_dir_skips_malformed_skill_md(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_skips_malformed_skill_md(tmp_path, monkeypatch, library):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -1135,11 +1059,8 @@ def test_import_from_local_dir_skips_malformed_skill_md(tmp_path, monkeypatch):
 
 
 def test_import_from_local_dir_exits_when_lifecycle_selection_cancelled(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, library
 ):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
 
     collection = tmp_path / "my-collection"
     collection.mkdir()
@@ -1153,10 +1074,9 @@ def test_import_from_local_dir_exits_when_lifecycle_selection_cancelled(
     assert result.exit_code != 0
 
 
-def test_import_from_local_dir_skips_when_collision_rename_blank(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_skips_when_collision_rename_blank(
+    tmp_path, monkeypatch, library
+):
 
     existing = library / "skill-a"
     existing.mkdir()
@@ -1188,8 +1108,7 @@ _SKILL_MD_WITH_EXTRAS = (
 
 
 @respx.mock
-def test_import_single_preserves_extra_fields(tmp_path, monkeypatch):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path))
+def test_import_single_preserves_extra_fields(library, monkeypatch):
     _mock_select("active", monkeypatch)
     respx.get(_TARBALL_URL).mock(
         return_value=httpx.Response(
@@ -1200,15 +1119,12 @@ def test_import_single_preserves_extra_fields(tmp_path, monkeypatch):
     result = runner.invoke(app, ["import", _RAW_URL])
 
     assert result.exit_code == 0, result.output
-    text = (tmp_path / "my-skill" / "SKILL.md").read_text()
+    text = (library / "my-skill" / "SKILL.md").read_text()
     assert "license: MIT" in text
     assert "allowed-tools" in text
 
 
-def test_import_from_local_path_preserves_extra_fields(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_path_preserves_extra_fields(tmp_path, monkeypatch, library):
     _mock_select("active", monkeypatch)
 
     skill_src = tmp_path / "my-skill"
@@ -1223,10 +1139,7 @@ def test_import_from_local_path_preserves_extra_fields(tmp_path, monkeypatch):
     assert "allowed-tools" in text
 
 
-def test_import_from_local_dir_preserves_extra_fields(tmp_path, monkeypatch):
-    library = tmp_path / "library"
-    library.mkdir()
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(library))
+def test_import_from_local_dir_preserves_extra_fields(tmp_path, monkeypatch, library):
 
     collection = tmp_path / "my-collection"
     collection.mkdir()

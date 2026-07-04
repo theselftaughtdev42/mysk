@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from mysk.domain import LifecycleState, MyskBlock, Skill
-from mysk.io import skills as skills_mod
 from mysk.io.skills import (
     CollisionError,
     InstalledSkill,
@@ -81,47 +80,56 @@ def test_installed_skills_are_sorted_alphabetically(tmp_path):
     assert [r.dir.name for r in installed] == ["alpha", "mango", "zebra"]
 
 
-def test_skill_library_path_defaults_to_platformdirs_data_dir(monkeypatch, tmp_path):
-    monkeypatch.delenv("MYSK_SKILLS_DIR", raising=False)
-    monkeypatch.setattr(skills_mod, "user_data_dir", lambda app: str(tmp_path / app))
-    assert skill_library_path() == tmp_path / "mysk" / "skills"
+def test_skill_library_path_defaults_to_dot_mysk_under_home(monkeypatch, tmp_path):
+    monkeypatch.delenv("MYSK_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert skill_library_path() == tmp_path / ".mysk" / "skills"
 
 
-def test_skill_library_path_env_override_takes_precedence(monkeypatch, tmp_path):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path / "custom"))
-    assert skill_library_path() == tmp_path / "custom"
+def test_skill_library_path_env_override_resolves_under_mysk_home(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MYSK_HOME", str(tmp_path / "custom"))
+    assert skill_library_path() == tmp_path / "custom" / "skills"
 
 
 def test_skill_library_path_does_not_create_directory(monkeypatch, tmp_path):
-    target = tmp_path / "nonexistent" / "skills"
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(target))
+    home = tmp_path / "nonexistent"
+    monkeypatch.setenv("MYSK_HOME", str(home))
     skill_library_path()
-    assert not target.exists()
+    assert not home.exists()
 
 
-def test_skill_library_defaults_to_platformdirs_data_dir(monkeypatch, tmp_path):
-    monkeypatch.delenv("MYSK_SKILLS_DIR", raising=False)
-    monkeypatch.setattr(skills_mod, "user_data_dir", lambda app: str(tmp_path / app))
-    assert skill_library() == tmp_path / "mysk" / "skills"
+def test_skill_library_defaults_to_dot_mysk_under_home(monkeypatch, tmp_path):
+    monkeypatch.delenv("MYSK_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert skill_library() == tmp_path / ".mysk" / "skills"
 
 
-def test_skill_library_env_override_takes_precedence(monkeypatch, tmp_path):
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(tmp_path / "custom"))
-    assert skill_library() == tmp_path / "custom"
+def test_skill_library_env_override_resolves_under_mysk_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("MYSK_HOME", str(tmp_path / "custom"))
+    assert skill_library() == tmp_path / "custom" / "skills"
 
 
 def test_skill_library_env_override_expands_user(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("MYSK_SKILLS_DIR", "~/my-skills")
-    assert skill_library() == tmp_path / "my-skills"
+    monkeypatch.setenv("MYSK_HOME", "~/my-home")
+    assert skill_library() == tmp_path / "my-home" / "skills"
+
+
+def test_skill_library_env_override_resolves_relative_path(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MYSK_HOME", "relative-home")
+    assert skill_library() == tmp_path / "relative-home" / "skills"
 
 
 def test_skill_library_creates_directory_when_absent(monkeypatch, tmp_path):
-    target = tmp_path / "nested" / "skills"
-    monkeypatch.setenv("MYSK_SKILLS_DIR", str(target))
-    assert not target.exists()
-    assert skill_library() == target
-    assert target.is_dir()
+    home = tmp_path / "nested"
+    monkeypatch.setenv("MYSK_HOME", str(home))
+    assert not home.exists()
+    library = skill_library()
+    assert library == home / "skills"
+    assert library.is_dir()
 
 
 def test_imported_skill_carries_provenance(tmp_path):
