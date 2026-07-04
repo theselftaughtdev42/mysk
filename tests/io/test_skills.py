@@ -80,6 +80,18 @@ def test_installed_skills_are_sorted_alphabetically(tmp_path):
     assert [r.dir.name for r in installed] == ["alpha", "mango", "zebra"]
 
 
+def test_skill_library_isolated_under_temp_home_by_default(mysk_home):
+    """A test that sets nothing still resolves under the autouse temp home.
+
+    Proves the isolation guarantee is active on every run: without the test
+    touching `MYSK_HOME` at all, `skill_library()` resolves under the per-test
+    temporary mysk home, never the real `~/.mysk`.
+    """
+    resolved = skill_library()
+    assert resolved == mysk_home / "skills"
+    assert Path.home() not in resolved.parents
+
+
 def test_skill_library_path_defaults_to_dot_mysk_under_home(monkeypatch, tmp_path):
     monkeypatch.delenv("MYSK_HOME", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
