@@ -96,10 +96,12 @@ def check_collision(library: Path, name: str, source: str | None) -> None:
     - Same name + different source → suggest `--rename`
     - Same name + self-authored (no source) → suggest `--rename`
     """
+    # no skill by that name yet: no collision
     skill_md = library / name / "SKILL.md"
     if not skill_md.exists():
         return
 
+    # load the colliding skill so its source can be compared
     data, _ = frontmatter.read(skill_md.read_text())
     try:
         existing = Skill.from_frontmatter(data)
@@ -114,6 +116,7 @@ def check_collision(library: Path, name: str, source: str | None) -> None:
         existing.mysk.provenance.source if existing.mysk is not None else None
     )
 
+    # same source: the existing skill can be refreshed in place
     if existing_source == source:
         msg = (
             f"A skill named {name!r} from the same source is already in the Skill "

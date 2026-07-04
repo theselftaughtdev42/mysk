@@ -29,6 +29,7 @@ def reconcile_skill(
     Returns a ReconcileResult describing what happened (deployed, overwritten,
     or skipped) and an optional human-readable reason.
     """
+    # an existing symlink: replace it, unless it belongs to something else
     if target_path.is_symlink():
         owned_by_mysk = target_path.resolve().is_relative_to(skill_library_path)
         if not owned_by_mysk and not overwrite:
@@ -43,10 +44,12 @@ def reconcile_skill(
         target_path.symlink_to(source_dir)
         return ReconcileResult(outcome="overwritten")
 
+    # nothing at the target: create the symlink
     if not target_path.exists():
         target_path.symlink_to(source_dir)
         return ReconcileResult(outcome="deployed")
 
+    # a real directory is in the way: replace it only with --overwrite
     if not overwrite:
         return ReconcileResult(
             outcome="skipped",

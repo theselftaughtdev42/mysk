@@ -54,11 +54,14 @@ def undeploy(
     ),
 ) -> None:
     """Remove deployed skills from selected Deployment Targets."""
+    # discover the available Deployment Targets
     targets = discover_targets()
 
+    # load skills from the Skill Library
     library = skill_library()
     deployable, _ = load_skills(library)
 
+    # resolve the Skill Selection from CLI flags
     try:
         selected_skills = resolve_skill_selection(
             skill=skill,
@@ -70,6 +73,7 @@ def undeploy(
         err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
+    # resolve the Deployment Targets from --agents or an interactive prompt
     if agents is not None:
         names = {n.strip() for n in agents.split(",")}
         known = {t.name for t in targets}
@@ -90,6 +94,7 @@ def undeploy(
         console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
+    # fall back to an interactive Skill Selection when no flag picked one
     if selected_skills is None:
         skill_choices = build_skill_choices(
             deployable,
@@ -107,6 +112,7 @@ def undeploy(
         console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
+    # remove each selected skill from each target
     for target in selected_targets:
         console.print(f"\n{target.name}:", markup=False)
         for skill_result in selected_skills:

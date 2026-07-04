@@ -60,6 +60,7 @@ def import_skill(
 
 
 def _import_from_local_dir(path: Path) -> None:
+    # find the importable skill directories (those with a SKILL.md)
     skill_dirs = sorted(
         d for d in path.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
     )
@@ -68,6 +69,7 @@ def _import_from_local_dir(path: Path) -> None:
         err_console.print("[red]Error:[/red] No skills found in this directory.")
         raise typer.Exit(1)
 
+    # let the user choose which skills to import
     selected_names = questionary.checkbox(
         "Choose skills to import:", choices=[d.name for d in skill_dirs]
     ).ask()
@@ -79,6 +81,7 @@ def _import_from_local_dir(path: Path) -> None:
     total = len(selected_names)
     imported = 0
 
+    # import each chosen skill into the Skill Library, tracking successes
     for i, name in enumerate(selected_names, 1):
         skill_dir = skill_dir_map[name]
 
@@ -90,6 +93,7 @@ def _import_from_local_dir(path: Path) -> None:
             )
         )
 
+        # resolve the local name, prompting on a Skill Library collision
         local_name = _resolve_local_name(
             library,
             name,
@@ -99,6 +103,7 @@ def _import_from_local_dir(path: Path) -> None:
         if local_name is None:
             continue
 
+        # parse the source skill's frontmatter
         data, body = frontmatter.read((skill_dir / "SKILL.md").read_text())
         try:
             local_skill = Skill.from_frontmatter(data)
@@ -108,6 +113,7 @@ def _import_from_local_dir(path: Path) -> None:
             )
             continue
 
+        # verify the declared name matches the directory when kept as-is
         if local_name == name and local_skill.name != name:
             err_console.print(
                 f"[red]Error:[/red] The skill's name field "
@@ -116,12 +122,14 @@ def _import_from_local_dir(path: Path) -> None:
             )
             continue
 
+        # choose a lifecycle state for the imported skill
         state_value = questionary.select(
             "Choose a lifecycle state:", choices=_LIFECYCLE_CHOICES
         ).ask()
         if state_value is None:
             raise typer.Exit(1)
 
+        # write the skill into the Skill Library under its local name
         mysk_block = MyskBlock(
             state=LifecycleState(state_value),
             provenance=Provenance(),
@@ -138,6 +146,7 @@ def _import_from_local_dir(path: Path) -> None:
         )
         imported += 1
 
+    # report how many of the selection were imported
     console.print()
     console.print(Rule(style="dim"))
     console.print(
@@ -146,12 +155,14 @@ def _import_from_local_dir(path: Path) -> None:
 
 
 def _import_from_repo_root(url: str) -> None:
+    # parse the GitHub repo root URL
     try:
         repo_root_url = RepoRootUrl.parse(url)
     except ValueError as exc:
         err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
         raise typer.Exit(1) from None
 
+    # scan the repo for directories holding a SKILL.md
     try:
         skill_paths = scan_repo_for_skills(repo_root_url)
     except DownloadError as exc:
@@ -162,6 +173,7 @@ def _import_from_repo_root(url: str) -> None:
         err_console.print("[red]Error:[/red] No skills found in this repository.")
         raise typer.Exit(1)
 
+    # let the user choose which skills to import
     selected_paths = questionary.checkbox(
         "Choose skills to import:", choices=skill_paths
     ).ask()
@@ -172,6 +184,7 @@ def _import_from_repo_root(url: str) -> None:
     total = len(selected_paths)
     imported = 0
 
+    # import each chosen skill via the single-skill flow, tracking successes
     for i, path in enumerate(selected_paths, 1):
         skill_url = repo_root_url.skill_url(path)
         import_url = ImportUrl.parse(skill_url)
@@ -185,6 +198,7 @@ def _import_from_repo_root(url: str) -> None:
             )
         )
 
+        # resolve the local name, prompting on a Skill Library collision
         local_name = _resolve_local_name(
             library,
             upstream_dir_name,
@@ -201,6 +215,7 @@ def _import_from_repo_root(url: str) -> None:
         _import_single(import_url, skill_url, rename)
         imported += 1
 
+    # report how many of the selection were imported
     console.print()
     console.print(Rule(style="dim"))
     console.print(
@@ -245,6 +260,7 @@ def _write_skill_to_library(src: Path, skill_md_content: str, dest: Path) -> Non
 
 
 def _import_from_local_path(path: Path, rename: str | None = None) -> None:
+    # choose the local name, honoring --rename
     local_name = rename if rename is not None else path.name
 
     try:
@@ -255,6 +271,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
 
     library = skill_library()
 
+    # resolve any name collision against the Skill Library
     resolved_name = _resolve_local_name(
         library,
         local_name,
@@ -270,6 +287,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
         err_console.print("[red]Error:[/red] Skill directory has no SKILL.md.")
         raise typer.Exit(1)
 
+    # parse the source skill's frontmatter
     data, body = frontmatter.read(skill_md_path.read_text())
     try:
         local_skill = Skill.from_frontmatter(data)
@@ -277,6 +295,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
         err_console.print(f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}")
         raise typer.Exit(1) from None
 
+    # verify the declared name matches the directory when not renaming
     if rename is None and local_skill.name != path.name:
         err_console.print(
             f"[red]Error:[/red] The skill's name field "
@@ -286,6 +305,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
         )
         raise typer.Exit(1)
 
+    # choose a lifecycle state for the imported skill
     state_value = questionary.select(
         "Choose a lifecycle state:",
         choices=_LIFECYCLE_CHOICES,
@@ -293,6 +313,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
     if state_value is None:
         raise typer.Exit(1)
 
+    # write the skill into the Skill Library under its local name
     mysk_block = MyskBlock(
         state=LifecycleState(state_value),
         provenance=Provenance(),
@@ -311,6 +332,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
 
 
 def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
+    # choose the local name, honoring --rename
     upstream_dir_name = import_url.skill_dir_name
     local_name = rename if rename is not None else upstream_dir_name
 
@@ -322,6 +344,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
 
     library = skill_library()
 
+    # resolve any name collision against the Skill Library
     resolved_name = _resolve_local_name(
         library,
         local_name,
@@ -334,6 +357,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
         rename = resolved_name
     local_name = resolved_name
 
+    # download the upstream skill into a temp staging dir
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / local_name
         try:
@@ -347,6 +371,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
             err_console.print("[red]Error:[/red] Downloaded skill has no SKILL.md.")
             raise typer.Exit(1)
 
+        # parse the downloaded skill's frontmatter
         data, body = frontmatter.read(skill_md_path.read_text())
         try:
             downloaded_skill = Skill.from_frontmatter(data)
@@ -357,6 +382,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
             )
             raise typer.Exit(1) from None
 
+        # verify the declared name matches the upstream directory
         if downloaded_skill.name != upstream_dir_name:
             err_console.print(
                 f"[red]Error:[/red] The skill's name field "
@@ -366,6 +392,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
             )
             raise typer.Exit(1)
 
+        # choose a lifecycle state for the imported skill
         state_value = questionary.select(
             "Choose a lifecycle state:",
             choices=_LIFECYCLE_CHOICES,
@@ -373,6 +400,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
         if state_value is None:
             raise typer.Exit(1)
 
+        # record provenance and write the skill into the Skill Library
         upstream_name = upstream_dir_name if rename is not None else None
         provenance = Provenance(source=url, modified=False, upstream_name=upstream_name)
         mysk_block = MyskBlock(

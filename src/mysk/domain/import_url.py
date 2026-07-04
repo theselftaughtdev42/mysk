@@ -20,6 +20,7 @@ class RepoRootUrl(BaseModel):
     @classmethod
     def parse(cls, raw: str) -> Self:
         """Parse a `https://github.com/{owner}/{repo}` URL."""
+        # only github.com is supported for now
         parsed = urlparse(raw)
         if parsed.hostname != "github.com":
             msg = (
@@ -27,6 +28,7 @@ class RepoRootUrl(BaseModel):
                 f"got: {parsed.hostname!r}"
             )
             raise ValueError(msg)
+        # expect exactly an owner/repo path, nothing more
         parts = parsed.path.strip("/").split("/")
         if len(parts) != _REPO_URL_PARTS or not all(parts):
             msg = (
@@ -67,6 +69,7 @@ class ImportUrl(BaseModel):
     @classmethod
     def parse(cls, raw: str) -> Self:
         """Parse a `https://github.com/{owner}/{repo}/tree/{ref}/{path}` URL."""
+        # only github.com is supported for now
         parsed = urlparse(raw)
         if parsed.hostname != "github.com":
             msg = (

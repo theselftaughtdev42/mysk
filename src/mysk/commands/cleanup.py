@@ -36,6 +36,7 @@ def cleanup(
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Remove deprecated skills from all Deployment Targets."""
+    # gather deprecated skills from the Skill Library
     library = skill_library()
     installed, _ = load_skills(library)
     deprecated = [r for r in installed if r.mysk.state == LifecycleState.DEPRECATED]
@@ -44,6 +45,7 @@ def cleanup(
         console.print("Nothing to clean up.", markup=False)
         raise typer.Exit(0)
 
+    # resolve the Skill Selection from CLI flags
     try:
         selected_skills = resolve_skill_selection(
             skill=None, bulk=bulk, select_all=select_all, eligible=deprecated
@@ -52,6 +54,7 @@ def cleanup(
         err_console.print(str(exc), markup=False)
         raise typer.Exit(1) from None
 
+    # fall back to an interactive Skill Selection when no flag picked one
     if selected_skills is None:
         skill_choices = build_skill_choices(deprecated, relevance=lambda _: None)
         selected_skills = questionary.checkbox(
@@ -62,6 +65,7 @@ def cleanup(
         console.print("Nothing selected.", markup=False)
         raise typer.Exit(0)
 
+    # confirm removal across every Deployment Target
     targets = discover_targets()
 
     skill_names = ", ".join(r.skill.name for r in selected_skills)
@@ -73,6 +77,7 @@ def cleanup(
     ):
         raise typer.Exit(0)
 
+    # remove each selected skill from every target
     for target in targets:
         console.print(f"\n{target.name}:", markup=False)
         for skill_result in selected_skills:

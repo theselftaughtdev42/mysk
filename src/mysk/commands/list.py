@@ -19,6 +19,7 @@ _HIGHLIGHTED = {LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL}
 @app.callback()
 def list_skills() -> None:
     """List all skills and where they are deployed."""
+    # load skills from the Skill Library and discover Deployment Targets
     library = skill_library()
     installed, errors = load_skills(library)
     targets = discover_targets()
@@ -29,6 +30,7 @@ def list_skills() -> None:
     table.add_column("Provenance")
     table.add_column("Deployed To")
 
+    # render each installed skill with its status, provenance, and where deployed
     for r in installed:
         state = r.mysk.state
         prov = r.mysk.provenance
@@ -56,6 +58,7 @@ def list_skills() -> None:
                 style="dim",
             )
 
+    # render skills that failed to load as dimmed rows
     for r in errors:
         name = escape(r.path.parent.name)
         status_label = (
