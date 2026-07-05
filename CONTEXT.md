@@ -33,11 +33,11 @@ The canonical local directory where all 'mysk-owned' skills are stored, located 
 _Avoid_: skills directory, skills folder, source repo
 
 **Deploy**:
-The act of symlinking skills from the Skill Library into selected Deployment Targets via an interactive prompt. The author chooses which targets and which skills; all skills are offered for selection regardless of lifecycle state, shown as `name (state)` so an informed choice can be made.
+The act of symlinking skills from the Skill Library into Deployment Targets. Targets default to all found targets and are narrowed with `--agents`; skills are curated via `<skill>`/`--bulk`/`--all` or an interactive picker. All skills are offered for selection regardless of lifecycle state, shown as `name (state)` so an informed choice can be made.
 _Avoid_: install, publish, sync
 
 **Undeploy**:
-The operation that removes skill symlinks from selected Deployment Targets without affecting the skill in the Skill Library.
+The operation that removes skill symlinks from Deployment Targets — all found targets by default, narrowed with `--agents` — without affecting the skill in the Skill Library.
 _Avoid_: recall, retract, withdraw, uninstall
 
 **Import**:
@@ -49,7 +49,7 @@ The operation that updates an already-imported skill from its `source` URL.
 _Avoid_: update, sync, pull
 
 **Deployment Target**:
-An agent-specific directory on the local machine that receives symlinked skills (e.g. `~/.claude/skills`, `~/.cursor/skills`). Targets are auto-discovered by checking whether the agent's home directory exists — no config file is maintained.
+An agent-specific directory on the local machine that receives symlinked skills (e.g. `~/.claude/skills`, `~/.cursor/skills`). Targets are auto-discovered by checking whether the agent's home directory exists — no config file is maintained. mysk recognizes a fixed vocabulary of *known* agents (claude, cursor, codex); a target is *found* only when that agent's home directory exists. Operations act on the found set and `--agents` narrows within it — naming a known-but-uninstalled agent is a distinct, explained error, not a silent no-op.
 _Avoid_: destination, output directory
 
 **Active**:
