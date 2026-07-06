@@ -19,7 +19,12 @@ from mysk.domain.provenance import Provenance
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
 from mysk.io.github import DownloadError, download_skill, scan_repo_for_skills
-from mysk.io.skills import CollisionError, check_collision, skill_library
+from mysk.io.skills import (
+    CollisionError,
+    check_collision,
+    load_skills,
+    skill_library,
+)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -173,14 +178,43 @@ def _import_from_repo_root(url: str) -> None:
         err_console.print("[red]Error:[/red] No skills found in this repository.")
         raise typer.Exit(1)
 
+    # disable skills already imported from the same source, keeping the rest
+    # selectable in their existing order
+    library = skill_library()
+    imported_by_source = _imported_by_source(library)
+    choices: list[questionary.Choice | str] = []
+    already_imported = 0
+    for path in skill_paths:
+        local_name = imported_by_source.get(repo_root_url.skill_url(path))
+        if local_name is None:
+            choices.append(path)
+        else:
+            already_imported += 1
+            choices.append(
+                questionary.Choice(
+                    path,
+                    disabled=(
+                        f"already imported as {local_name!r} — "
+                        f"run: mysk refresh {local_name}"
+                    ),
+                )
+            )
+
+    # nothing left to pick: everything is already imported, so skip the picker
+    if already_imported == len(skill_paths):
+        console.print(
+            f"All {already_imported} skills in this repo are already imported. "
+            "Run 'mysk refresh' to update them."
+        )
+        return
+
     # let the user choose which skills to import
     selected_paths = questionary.checkbox(
-        "Choose skills to import:", choices=skill_paths
+        "Choose skills to import:", choices=choices
     ).ask()
     if not selected_paths:
         raise typer.Exit(1)
 
-    library = skill_library()
     total = len(selected_paths)
     imported = 0
 
@@ -221,6 +255,19 @@ def _import_from_repo_root(url: str) -> None:
     console.print(
         f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills."
     )
+
+
+def _imported_by_source(library: Path) -> dict[str, str]:
+    # map each imported skill's source URL to its local name, skipping
+    # self-authored skills (no source); malformed skills are already excluded
+    # by load_skills' error channel and never participate in detection
+    imported: dict[str, str] = {}
+    installed, _ = load_skills(library)
+    for skill in installed:
+        source = skill.mysk.provenance.source
+        if source is not None:
+            imported[source] = skill.skill.name
+    return imported
 
 
 def _resolve_local_name(

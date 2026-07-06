@@ -49,12 +49,17 @@ def _mock_text(answer: str, monkeypatch):
     )
 
 
-def _mock_checkbox(answers: list[str], monkeypatch):
-    monkeypatch.setattr(
-        import_cmd.questionary,
-        "checkbox",
-        lambda *a, **kw: type("Q", (), {"ask": staticmethod(lambda: answers)})(),
-    )
+def _mock_checkbox(answers: list[str], monkeypatch) -> dict:
+    # capture the choices handed to the picker so tests can inspect each
+    # choice's disabled state and reason string at the CLI seam
+    captured: dict = {}
+
+    def fake_checkbox(*a, **kw):
+        captured["choices"] = kw.get("choices")
+        return type("Q", (), {"ask": staticmethod(lambda: answers)})()
+
+    monkeypatch.setattr(import_cmd.questionary, "checkbox", fake_checkbox)
+    return captured
 
 
 @respx.mock
@@ -248,6 +253,210 @@ def test_import_from_repo_root_picks_skill_and_imports(library, monkeypatch):
     assert "state: active" in text
     assert "modified: false" in text
     assert "my-skill" in text
+
+
+def _imported_skill_md(name: str, source: str, upstream_name: str | None = None) -> str:
+    extra = f"  upstream_name: {upstream_name}\n" if upstream_name else ""
+    return (
+        f"---\nname: {name}\ndescription: d\nmysk:\n  state: active\n"
+        f"  source: {source}\n  modified: false\n{extra}---\n"
+    )
+
+
+def _disabled_reason(choice) -> str | None:
+    return getattr(choice, "disabled", None)
+
+
+@respx.mock
+def test_import_from_repo_root_disables_already_imported_same_source(
+    library, monkeypatch
+):
+    root = RepoRootUrl.parse(_REPO_ROOT_URL)
+    existing = library / "my-skill"
+    existing.mkdir()
+    (existing / "SKILL.md").write_text(
+        _imported_skill_md("my-skill", root.skill_url("my-skill"))
+    )
+
+    captured = _mock_checkbox([], monkeypatch)
+    respx.get(root.trees_api_url()).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tree": [
+                    {"type": "blob", "path": "my-skill/SKILL.md"},
+                    {"type": "blob", "path": "other-skill/SKILL.md"},
+                ]
+            },
+        )
+    )
+
+    result = runner.invoke(app, ["import", _REPO_ROOT_URL])
+
+    assert result.exit_code != 0, result.output  # empty selection exits
+    choices = {c if isinstance(c, str) else c.value: c for c in captured["choices"]}
+    assert (
+        _disabled_reason(choices["my-skill"])
+        == "already imported as 'my-skill' — run: mysk refresh my-skill"
+    )
+    assert _disabled_reason(choices["other-skill"]) is None
+
+
+@respx.mock
+def test_import_from_repo_root_ignores_self_authored_name_match(library, monkeypatch):
+    root = RepoRootUrl.parse(_REPO_ROOT_URL)
+    existing = library / "my-skill"
+    existing.mkdir()
+    (existing / "SKILL.md").write_text(
+        "---\nname: my-skill\ndescription: d\nmysk:\n  state: active\n---\n"
+    )
+
+    captured = _mock_checkbox([], monkeypatch)
+    respx.get(root.trees_api_url()).mock(
+        return_value=httpx.Response(
+            200, json={"tree": [{"type": "blob", "path": "my-skill/SKILL.md"}]}
+        )
+    )
+
+    result = runner.invoke(app, ["import", _REPO_ROOT_URL])
+
+    assert result.exit_code != 0, result.output  # empty selection, no short-circuit
+    (choice,) = captured["choices"]
+    assert _disabled_reason(choice) is None  # self-authored: still selectable
+
+
+@respx.mock
+def test_import_from_repo_root_tolerates_malformed_library_skill(library, monkeypatch):
+    root = RepoRootUrl.parse(_REPO_ROOT_URL)
+    broken = library / "broken"
+    broken.mkdir()
+    (broken / "SKILL.md").write_text("---\ndescription: missing name\n---\n")
+    good = library / "my-skill"
+    good.mkdir()
+    (good / "SKILL.md").write_text(
+        _imported_skill_md("my-skill", root.skill_url("my-skill"))
+    )
+
+    captured = _mock_checkbox([], monkeypatch)
+    respx.get(root.trees_api_url()).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tree": [
+                    {"type": "blob", "path": "my-skill/SKILL.md"},
+                    {"type": "blob", "path": "other-skill/SKILL.md"},
+                ]
+            },
+        )
+    )
+
+    result = runner.invoke(app, ["import", _REPO_ROOT_URL])
+
+    assert result.exit_code != 0, result.output  # empty selection, but no crash
+    choices = {c if isinstance(c, str) else c.value: c for c in captured["choices"]}
+    assert _disabled_reason(choices["my-skill"]) is not None
+    assert _disabled_reason(choices["other-skill"]) is None
+
+
+@respx.mock
+def test_import_from_repo_root_mixed_imports_the_selectable_skill(library, monkeypatch):
+    root = RepoRootUrl.parse(_REPO_ROOT_URL)
+    existing = library / "skill-a"
+    existing.mkdir()
+    (existing / "SKILL.md").write_text(
+        _imported_skill_md("skill-a", root.skill_url("skill-a"))
+    )
+
+    captured = _mock_checkbox(["skill-b"], monkeypatch)
+    _mock_select("active", monkeypatch)
+    respx.get(root.trees_api_url()).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tree": [
+                    {"type": "blob", "path": "skill-a/SKILL.md"},
+                    {"type": "blob", "path": "skill-b/SKILL.md"},
+                ]
+            },
+        )
+    )
+    respx.get(_REPO_ROOT_TARBALL_URL).mock(
+        return_value=httpx.Response(200, content=_make_tarball("skill-b", _SKILL_B_MD))
+    )
+
+    result = runner.invoke(app, ["import", _REPO_ROOT_URL])
+
+    assert result.exit_code == 0, result.output
+    assert (library / "skill-b" / "SKILL.md").exists()
+    choices = {c if isinstance(c, str) else c.value: c for c in captured["choices"]}
+    assert _disabled_reason(choices["skill-a"]) is not None
+    assert _disabled_reason(choices["skill-b"]) is None
+
+
+@respx.mock
+def test_import_from_repo_root_short_circuits_when_all_already_imported(
+    library, monkeypatch
+):
+    root = RepoRootUrl.parse(_REPO_ROOT_URL)
+    for name in ("skill-a", "skill-b"):
+        d = library / name
+        d.mkdir()
+        (d / "SKILL.md").write_text(_imported_skill_md(name, root.skill_url(name)))
+
+    captured = _mock_checkbox([], monkeypatch)
+    respx.get(root.trees_api_url()).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tree": [
+                    {"type": "blob", "path": "skill-a/SKILL.md"},
+                    {"type": "blob", "path": "skill-b/SKILL.md"},
+                ]
+            },
+        )
+    )
+
+    result = runner.invoke(app, ["import", _REPO_ROOT_URL])
+
+    assert result.exit_code == 0, result.output
+    assert "choices" not in captured  # picker never shown
+    assert "All 2 skills" in result.output
+    assert "refresh" in result.output
+
+
+@respx.mock
+def test_import_from_repo_root_disabled_reason_uses_local_renamed_name(
+    library, monkeypatch
+):
+    root = RepoRootUrl.parse(_REPO_ROOT_URL)
+    existing = library / "local-name"
+    existing.mkdir()
+    (existing / "SKILL.md").write_text(
+        _imported_skill_md(
+            "local-name", root.skill_url("my-skill"), upstream_name="my-skill"
+        )
+    )
+
+    captured = _mock_checkbox([], monkeypatch)
+    respx.get(root.trees_api_url()).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tree": [
+                    {"type": "blob", "path": "my-skill/SKILL.md"},
+                    {"type": "blob", "path": "other-skill/SKILL.md"},
+                ]
+            },
+        )
+    )
+
+    runner.invoke(app, ["import", _REPO_ROOT_URL])
+
+    choices = {c if isinstance(c, str) else c.value: c for c in captured["choices"]}
+    assert (
+        _disabled_reason(choices["my-skill"])
+        == "already imported as 'local-name' — run: mysk refresh local-name"
+    )
 
 
 def test_import_from_local_path_with_rename_ignores_source_name_mismatch(
