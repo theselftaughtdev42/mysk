@@ -7,20 +7,21 @@ from typing import Annotated, cast
 
 import questionary
 import typer
-from rich.markup import escape
 
-from mysk.console import console, err_console
 from mysk.domain.import_url import ImportUrl
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
 from mysk.io.github import DownloadError, download_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     confirm,
     resolve_skill_selection,
 )
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -67,7 +68,7 @@ def refresh_skill(
         )
     except SkillSelectionError as exc:
         if name is None or bulk is not None or all_skills:
-            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+            out.error(str(exc))
             raise typer.Exit(1) from None
         selected = None
 
@@ -83,7 +84,7 @@ def refresh_skill(
             "Select skills to refresh:\n", choices=choices
         ).ask()
         if not selected:
-            console.print("Nothing selected.")
+            out.note("Nothing selected.")
             raise typer.Exit(0)
 
     # partition the selection into refreshable and modified-needs-review
@@ -91,7 +92,7 @@ def refresh_skill(
     needs_review = [r for r in selected if r.mysk.provenance.modified]
 
     if not refreshable and not needs_review:
-        console.print("No imported skills found in the Skill Library.")
+        out.note("No imported skills found in the Skill Library.")
         return
 
     # refresh each unmodified skill
@@ -100,21 +101,18 @@ def refresh_skill(
 
     # list the modified skills skipped as needing review
     if needs_review:
-        console.print(
+        out.product(
             "\n[bold yellow]Needs review[/bold yellow] (modified: true — skipped):"
         )
         for result in needs_review:
-            console.print(f"  {escape(result.dir.name)}")
+            out.product(f"  {result.dir.name}", raw=True)
 
 
 def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     skill_md_path = library / name / "SKILL.md"
 
     if not skill_md_path.exists():
-        err_console.print(
-            f"[red]Error:[/red] Skill {escape(repr(name))} "
-            "not found in the Skill Library."
-        )
+        out.error(f"Skill {name!r} not found in the Skill Library.")
         raise typer.Exit(1)
 
     # load the skill's current SKILL.md from the Skill Library
@@ -122,21 +120,21 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     try:
         skill = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        err_console.print(f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}")
+        out.error(f"Malformed SKILL.md: {exc}")
         raise typer.Exit(1) from None
 
     # refuse to refresh self-authored or locally modified skills
     if skill.mysk is None or not skill.mysk.provenance.is_imported:
-        err_console.print(
-            f"[red]Error:[/red] {escape(repr(name))} is self-authored. "
+        out.error(
+            f"{name!r} is self-authored. "
             "Only imported skills (with a source URL) can be refreshed."
         )
         raise typer.Exit(1)
 
     if skill.mysk.provenance.modified:
-        err_console.print(
-            f"[red]Error:[/red] {escape(repr(name))} has local changes "
-            "(modified: true). Reset modified to false before refreshing."
+        out.error(
+            f"{name!r} has local changes (modified: true). "
+            "Reset modified to false before refreshing."
         )
         raise typer.Exit(1)
 
@@ -145,26 +143,24 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     try:
         import_url = ImportUrl.parse(source)
     except ValueError as exc:
-        err_console.print(
-            f"[red]Error:[/red] Cannot parse source URL "
-            f"{escape(repr(source))}: {escape(str(exc))}"
-        )
+        out.error(f"Cannot parse source URL {source!r}: {exc}")
         raise typer.Exit(1) from None
 
     local_dir = library / name
 
     # download the upstream skill into a temp staging dir
+    out.info(f"refreshing {name!r} from {source}")
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / name
         try:
             download_skill(import_url, tmp_skill_dir)
         except DownloadError as exc:
-            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+            out.error(str(exc))
             raise typer.Exit(1) from None
 
         upstream_skill_md = tmp_skill_dir / "SKILL.md"
         if not upstream_skill_md.exists():
-            err_console.print("[red]Error:[/red] Downloaded skill has no SKILL.md.")
+            out.error("Downloaded skill has no SKILL.md.")
             raise typer.Exit(1)
 
         # parse the freshly downloaded upstream skill
@@ -172,9 +168,7 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
         try:
             upstream_skill = Skill.from_frontmatter(upstream_data)
         except (ValueError, KeyError) as exc:
-            err_console.print(
-                f"[red]Error:[/red] Malformed upstream SKILL.md: {escape(str(exc))}"
-            )
+            out.error(f"Malformed upstream SKILL.md: {exc}")
             raise typer.Exit(1) from None
 
         # keep the local mysk block, take content from upstream
@@ -190,19 +184,19 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
 
         # skip when nothing changed, otherwise confirm and replace local content
         if _dirs_are_identical(local_dir, tmp_skill_dir):
-            console.print(f"No changes — {escape(repr(name))} is already up to date.")
+            out.note(f"No changes — {name!r} is already up to date.")
             return
 
         if not confirm(
             f"Refresh {name!r}? This will overwrite its local content.", yes=yes
         ):
-            console.print(f"Aborted refresh of {escape(repr(name))}.")
+            out.note(f"Aborted refresh of {name!r}.")
             return
 
         shutil.rmtree(local_dir)
         shutil.copytree(tmp_skill_dir, local_dir)
 
-    console.print(f"Refreshed {escape(repr(name))}.")
+    out.success(f"Refreshed {name!r}.")
 
 
 def _dirs_are_identical(a: Path, b: Path) -> bool:

@@ -4,10 +4,12 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from mysk.console import console
 from mysk.domain.lifecycle import LifecycleState
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets, is_deployed
+from mysk.output import Output
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -72,10 +74,10 @@ def list_skills() -> None:
             style="dim",
         )
 
-    console.print(table)
+    out.product(table)
 
     if not targets:
-        console.print(
+        out.product(
             "\n[yellow]No deployment targets found."
             "Run [bold]mysk deploy[/bold] to deploy your skills.[/yellow]"
         )

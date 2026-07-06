@@ -1,4 +1,5 @@
 import io
+import logging
 import tarfile
 
 import httpx
@@ -46,6 +47,24 @@ def test_scan_repo_for_skills_raises_on_truncated_response():
 
 
 @respx.mock
+def test_scan_repo_logs_request_url_and_result_count(caplog):
+    tree_payload = {
+        "tree": [
+            {"type": "tree", "path": "skills/foo"},
+            {"type": "blob", "path": "skills/foo/SKILL.md"},
+        ]
+    }
+    respx.get(_ROOT_URL.trees_api_url()).mock(
+        return_value=httpx.Response(200, json=tree_payload)
+    )
+    with caplog.at_level(logging.DEBUG, logger="mysk"):
+        scan_repo_for_skills(_ROOT_URL)
+    messages = [r.message for r in caplog.records]
+    assert any(_ROOT_URL.trees_api_url() in m for m in messages)
+    assert any("1" in m for m in messages)
+
+
+@respx.mock
 def test_scan_repo_for_skills_returns_skill_dirs():
     tree_payload = {
         "tree": [
@@ -88,6 +107,19 @@ def test_download_skill_raises_when_skill_path_not_found_in_archive(tmp_path):
 
     with pytest.raises(DownloadError, match="Could not find"):
         download_skill(_URL, tmp_path / "my-skill")
+
+
+@respx.mock
+def test_download_logs_request_url_and_status(tmp_path, caplog):
+    tarball = _make_tarball("skills/my-skill", {"SKILL.md": "x\n"})
+    respx.get(_URL.tarball_url()).mock(
+        return_value=httpx.Response(200, content=tarball)
+    )
+    with caplog.at_level(logging.DEBUG, logger="mysk"):
+        download_skill(_URL, tmp_path / "my-skill")
+    messages = [r.message for r in caplog.records]
+    assert any(_URL.tarball_url() in m for m in messages)
+    assert any("200" in m for m in messages)
 
 
 @respx.mock

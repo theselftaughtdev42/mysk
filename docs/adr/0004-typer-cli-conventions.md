@@ -28,7 +28,9 @@ cli.py                              ← imports import_skill.app, calls app.add_
 
 ## Output
 
-All command screen output goes through two bare, shared Rich consoles defined in `mysk/console.py`:
+All command screen output goes through two bare, shared Rich consoles defined in `mysk/console.py`.
+
+> **Amended by [ADR-0009](0009-two-channel-output-facade.md).** The two consoles are now internals owned by the `Output` facade (`mysk/output.py`), which command modules use instead of importing `mysk.console` directly. The "all output through the consoles" rule holds for **user-facing** output; **diagnostics** are a separate `logging`-based channel (off unless `MYSK_LOG_LEVEL` is set). The stream contract and markup discipline below are unchanged — the facade enforces them internally.
 
 ### Stream contract (semantic, not exit-code-based)
 

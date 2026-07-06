@@ -5,6 +5,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from mysk.output import Output
+
+out = Output(__name__)
+
 DeployOutcome = Literal["deployed", "overwritten", "skipped"]
 RemoveOutcome = Literal["removed", "skipped"]
 
@@ -40,12 +44,14 @@ def reconcile_skill(
                 outcome="skipped",
                 reason=reason,
             )
+        out.debug(f"replacing symlink {target_path} → {source_dir}")
         target_path.unlink()
         target_path.symlink_to(source_dir)
         return ReconcileResult(outcome="overwritten")
 
     # nothing at the target: create the symlink
     if not target_path.exists():
+        out.debug(f"creating symlink {target_path} → {source_dir}")
         target_path.symlink_to(source_dir)
         return ReconcileResult(outcome="deployed")
 
@@ -56,6 +62,7 @@ def reconcile_skill(
             reason="directory already exists. Use --overwrite to replace",
         )
 
+    out.debug(f"overwriting directory {target_path} with symlink → {source_dir}")
     shutil.rmtree(target_path)
     target_path.symlink_to(source_dir)
     return ReconcileResult(outcome="overwritten")
@@ -78,6 +85,7 @@ def remove_skill(target_path: Path, skill_library_path: Path) -> RemoveResult:
         owned_by_mysk = target_path.resolve().is_relative_to(skill_library_path)
         if not owned_by_mysk:
             return RemoveResult(outcome="skipped", reason="not owned by mysk")
+        out.debug(f"removing symlink {target_path}")
         target_path.unlink()
         return RemoveResult(outcome="removed")
 

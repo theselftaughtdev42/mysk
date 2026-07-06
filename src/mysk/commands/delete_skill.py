@@ -6,16 +6,18 @@ from pathlib import Path
 import questionary
 import typer
 
-from mysk.console import console, err_console
 from mysk.domain.naming import validate_skill_name
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     confirm,
     resolve_skill_selection,
 )
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -44,23 +46,21 @@ def _delete_unrecognized_by_name(name: str, library: Path, *, yes: bool) -> None
     try:
         validate_skill_name(name)
     except ValueError as exc:
-        err_console.print(f"Error: {exc}", markup=False)
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     skill_dir = library / name
     if not skill_dir.is_dir():
-        err_console.print(
-            f"Skill '{name}' not found in the Skill Library.", markup=False
-        )
+        out.error(f"Skill '{name}' not found in the Skill Library.")
         raise typer.Exit(1)
 
     message = f"Delete '{name}' from the Skill Library and all Deployment Targets?"
     if not confirm(message, yes=yes):
-        console.print("Aborted.", markup=False)
+        out.note("Aborted.")
         raise typer.Exit(0)
 
     _delete_from_disk(name, skill_dir, library)
-    console.print(f"Deleted '{name}'.", markup=False)
+    out.success(f"Deleted '{name}'.")
 
 
 @app.callback()
@@ -94,7 +94,7 @@ def delete_skill(
         if name is not None and bulk is None and not select_all:
             _delete_unrecognized_by_name(name, library, yes=yes)
             return
-        err_console.print(str(exc), markup=False)
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     # fall back to an interactive Skill Selection when no flag picked one
@@ -105,16 +105,14 @@ def delete_skill(
         ).ask()
 
     if not selected:
-        console.print("Nothing selected.", markup=False)
+        out.note("Nothing selected.")
         raise typer.Exit(0)
 
     # warn about modified skills whose local changes will be lost
     modified = {r.skill.name for r in selected if r.mysk.provenance.modified}
     for skill_name in modified:
-        err_console.print(
-            f"Warning: '{skill_name}' has local modifications "
-            "that will be permanently lost.",
-            markup=False,
+        out.warn(
+            f"'{skill_name}' has local modifications that will be permanently lost."
         )
 
     # compose the confirmation prompt for the Skill Selection
@@ -133,10 +131,10 @@ def delete_skill(
         )
 
     if not confirm(message, yes=yes):
-        console.print("Aborted.", markup=False)
+        out.note("Aborted.")
         raise typer.Exit(0)
 
     # delete each selected skill from the Skill Library and every target
     for skill_result in selected:
         _delete_from_disk(skill_result.skill.name, skill_result.dir, library)
-        console.print(f"Deleted '{skill_result.skill.name}'.", markup=False)
+        out.success(f"Deleted '{skill_result.skill.name}'.")
