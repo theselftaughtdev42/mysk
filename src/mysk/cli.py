@@ -15,6 +15,7 @@ from mysk.commands import (
 from mysk.commands import (
     list as list_skills,
 )
+from mysk.logging_config import configure_logging
 
 app = typer.Typer(
     name="mysk",
@@ -22,6 +23,17 @@ app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
+
+
+@app.callback()
+def main() -> None:
+    """Initialise mysk's diagnostic logging channel once per invocation.
+
+    Takes no parameters, so it introduces no CLI flag; it only reads
+    `MYSK_LOG_LEVEL` (via `configure_logging`) at startup.
+    """
+    configure_logging()
+
 
 app.add_typer(import_skill.app, name="import")
 app.add_typer(deploy.app, name="deploy")

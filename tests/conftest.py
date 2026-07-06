@@ -25,8 +25,13 @@ def mysk_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     A test may still override `MYSK_HOME` in its body (in-body `setenv` runs
     after this fixture); the resolver's default-fallback tests `delenv` it and
     isolate via a redirected `HOME` to exercise the no-override branch.
+
+    The same isolation clears any ambient `MYSK_LOG_LEVEL`, so a contributor's
+    exported log level can never make the diagnostic channel non-deterministic
+    (a test opts in by `setenv`-ing it in its own body).
     """
     monkeypatch.setenv("MYSK_HOME", str(tmp_path))
+    monkeypatch.delenv("MYSK_LOG_LEVEL", raising=False)
     return tmp_path
 
 

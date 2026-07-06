@@ -92,6 +92,18 @@ _Avoid_: attribute, field, flag, property
 The `mysk:` frontmatter section in `SKILL.md` that contains all mysk-managed metadata. Its presence is the canonical signal that a skill is owned by `mysk`. Generic fields (`name`, `description`) live outside this block and are readable by any agent. The exact key names are recorded in ADR-0003.
 _Avoid_: mysk metadata, mysk config
 
+**Output**:
+The per-module facade (`mysk/output.py`), instantiated as `out = Output(__name__)`, that owns both of mysk's output channels — Presentation and Diagnostics. Command and io modules emit through it rather than touching the Rich consoles or `logging` directly. See ADR-0009.
+_Avoid_: logger, printer, console wrapper
+
+**Presentation Channel**:
+The user-facing half of the Output facade: the verbs `product`/`success`/`note` (stdout) and `warn`/`error` (stderr), rendered through the shared Rich consoles and always shown. Routing and markup discipline follow ADR-0004's stream contract.
+_Avoid_: UI output, screen output
+
+**Diagnostics Channel**:
+The debugging half of the Output facade: the verbs `debug`/`info`/`exception`, built on stdlib `logging` and hidden unless `MYSK_LOG_LEVEL` is set. Carries breadcrumbs about what mysk did internally (network, filesystem, resolution, decisions) — never user-facing product, warnings, or errors. See ADR-0009.
+_Avoid_: verbose output, debug prints, log
+
 ## Example dialogue
 
 > **Dev**: I want to add a skill I found on GitHub — how do I get it into mysk?

@@ -2,8 +2,10 @@
 
 import typer
 
-from mysk.console import console
 from mysk.io.skills import skill_library_path
+from mysk.output import Output
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -13,4 +15,4 @@ app = typer.Typer(
 @app.callback()
 def library_cmd() -> None:
     """Print the Skill Library filepath."""
-    console.print(skill_library_path(), markup=False, soft_wrap=True)
+    out.product(str(skill_library_path()), raw=True)

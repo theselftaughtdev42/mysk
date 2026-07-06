@@ -3,17 +3,19 @@
 import questionary
 import typer
 
-from mysk.console import console, err_console
 from mysk.domain.lifecycle import LifecycleState
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     confirm,
     resolve_skill_selection,
 )
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -42,7 +44,7 @@ def cleanup(
     deprecated = [r for r in installed if r.mysk.state == LifecycleState.DEPRECATED]
 
     if not deprecated:
-        console.print("Nothing to clean up.", markup=False)
+        out.note("Nothing to clean up.")
         raise typer.Exit(0)
 
     # resolve the Skill Selection from CLI flags
@@ -51,7 +53,7 @@ def cleanup(
             skill=None, bulk=bulk, select_all=select_all, eligible=deprecated
         )
     except SkillSelectionError as exc:
-        err_console.print(str(exc), markup=False)
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     # fall back to an interactive Skill Selection when no flag picked one
@@ -62,7 +64,7 @@ def cleanup(
         ).ask()
 
     if not selected_skills:
-        console.print("Nothing selected.", markup=False)
+        out.note("Nothing selected.")
         raise typer.Exit(0)
 
     # confirm removal across every Deployment Target
@@ -79,11 +81,11 @@ def cleanup(
 
     # remove each selected skill from every target
     for target in targets:
-        console.print(f"\n{target.name}:", markup=False)
+        out.product(f"\n{target.name}:", raw=True)
         for skill_result in selected_skills:
             target_path = target.path / skill_result.skill.name
             result = remove_skill(target_path, skill_library_path=library)
             line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            console.print(line, markup=False)
+            out.product(line, raw=True)

@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -78,6 +79,12 @@ def test_installed_skills_are_sorted_alphabetically(tmp_path):
     _skill(tmp_path, "mango", "name: mango\ndescription: d\nmysk:\n  state: active\n")
     installed, _ = load_skills(tmp_path)
     assert [r.dir.name for r in installed] == ["alpha", "mango", "zebra"]
+
+
+def test_skill_library_logs_resolved_path(mysk_home, caplog):
+    with caplog.at_level(logging.DEBUG, logger="mysk"):
+        skill_library()
+    assert any(str(mysk_home / "skills") in r.message for r in caplog.records)
 
 
 def test_skill_library_isolated_under_temp_home_by_default(mysk_home):

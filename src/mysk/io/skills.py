@@ -7,6 +7,9 @@ from pathlib import Path
 from mysk.domain.mysk_block import MyskBlock
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
+from mysk.output import Output
+
+out = Output(__name__)
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,7 @@ def skill_library() -> Path:
     or the `MYSK_HOME` path when that environment variable is set.
     """
     library = skill_library_path()
+    out.debug(f"resolved Skill Library at {library}")
     library.mkdir(parents=True, exist_ok=True)
     return library
 

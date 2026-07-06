@@ -5,17 +5,18 @@ from typing import Annotated
 
 import questionary
 import typer
-from rich.markup import escape
 
-from mysk.console import console, err_console
 from mysk.domain import LifecycleState, Skill
 from mysk.io import frontmatter
 from mysk.io.skills import InstalledSkill, SkillLoadError, load_skills, skill_library
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     resolve_skill_selection,
 )
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -77,15 +78,14 @@ def _apply_marking(skill_path: Path, *, value: LifecycleState | bool) -> str | N
     try:
         set_skill_modified(skill_path, value=value)
     except ValueError:
-        name = escape(skill_path.parent.name)
-        return f"[yellow]{name} is self-authored — skipping.[/yellow]"
+        return f"{skill_path.parent.name} is self-authored — skipping."
     else:
         return None
 
 
 def _validate_key(key: str) -> None:
     if key not in _VALID_KEYS:
-        err_console.print(f"[red]Unknown key: {escape(key)}[/red]")
+        out.error(f"Unknown key: {key}")
         raise typer.Exit(1)
 
 
@@ -94,14 +94,11 @@ def _resolve_value(key: str, value: str) -> LifecycleState | bool:
         try:
             return LifecycleState(value.lower())
         except ValueError as e:
-            err_console.print(f"[red]Unknown status: {escape(value)}[/red]")
+            out.error(f"Unknown status: {value}")
             raise typer.Exit(1) from e
     lower = value.lower()
     if lower not in ("true", "false"):
-        err_console.print(
-            f"[red]Invalid value for modified: {escape(value)}"
-            " — must be true or false.[/red]"
-        )
+        out.error(f"Invalid value for modified: {value} — must be true or false.")
         raise typer.Exit(1)
     return lower == "true"
 
@@ -115,18 +112,15 @@ def _report_selection_error(
     errors: list[SkillLoadError],
 ) -> None:
     if skill_name is None or bulk is not None or select_all:
-        err_console.print(f"[red]Error:[/red] {exc}")
+        out.error(str(exc))
         return
     error_match = next((e for e in errors if e.path.parent.name == skill_name), None)
     if error_match is None:
-        err_console.print(
-            f"[red]{escape(skill_name)} not found in the Skill Library.[/red]"
-        )
+        out.error(f"{skill_name} not found in the Skill Library.")
     else:
-        err_console.print(
-            f"[red]{escape(skill_name)} is not a valid skill"
-            f" — {error_match.schema_error}."
-            " Use mysk import to add skills to the library.[/red]"
+        out.error(
+            f"{skill_name} is not a valid skill — {error_match.schema_error}."
+            " Use mysk import to add skills to the library."
         )
 
 
@@ -136,7 +130,7 @@ def _resolve_selection(
     if selected is not None:
         return selected
     if not installed:
-        console.print("[dim]No skills in the Skill Library to mark.[/dim]")
+        out.note("No skills in the Skill Library to mark.")
         raise typer.Exit(0)
     choices = build_skill_choices(installed, relevance=lambda _: None)
     chosen = questionary.checkbox("Select skills to mark:\n", choices=choices).ask()
@@ -161,11 +155,11 @@ def _apply_and_report(
 
     # surface warnings — fatal in single-skill mode, informational in bulk
     if skill_name is not None and warnings:
-        err_console.print(warnings[0])
+        out.warn(warnings[0])
         raise typer.Exit(1)
 
     for warning in warnings:
-        console.print(warning)
+        out.warn(warning)
 
     # report the outcome, phrased for one skill vs many
     display = (
@@ -175,16 +169,10 @@ def _apply_and_report(
     )
 
     if len(selected) == 1:
-        console.print(
-            f"[green]Marked {escape(selected[0].skill.name)}: "
-            f"{escape(chosen_key)} = {escape(display)}.[/green]"
-        )
+        out.success(f"Marked {selected[0].skill.name}: {chosen_key} = {display}.")
     else:
-        names = ", ".join(escape(r.skill.name) for r in selected)
-        console.print(
-            f"[green][bold]{names}[/bold] marked: "
-            f"{escape(chosen_key)}={escape(display)}.[/green]"
-        )
+        names = ", ".join(r.skill.name for r in selected)
+        out.success(f"{names} marked: {chosen_key}={display}.")
 
 
 @app.callback()

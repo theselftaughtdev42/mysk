@@ -6,15 +6,17 @@ from pathlib import Path
 import questionary
 import typer
 
-from mysk.console import console, err_console
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
 from mysk.io.targets import Target, discover_targets, is_deployed
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     resolve_skill_selection,
 )
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -70,7 +72,7 @@ def undeploy(
             eligible=deployable,
         )
     except SkillSelectionError as exc:
-        err_console.print(str(exc), markup=False)
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     # resolve the Deployment Targets from --agents or an interactive prompt
@@ -79,9 +81,7 @@ def undeploy(
         known = {t.name for t in targets}
         unknown = names - known
         if unknown:
-            err_console.print(
-                f"Unknown agent(s): {', '.join(sorted(unknown))}", markup=False
-            )
+            out.error(f"Unknown agent(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
         selected_targets = [t for t in targets if t.name in names]
     else:
@@ -91,7 +91,7 @@ def undeploy(
         ).ask()
 
     if not selected_targets:
-        console.print("Nothing selected.", markup=False)
+        out.note("Nothing selected.")
         raise typer.Exit(0)
 
     # fall back to an interactive Skill Selection when no flag picked one
@@ -101,7 +101,7 @@ def undeploy(
             relevance=lambda r: _not_deployed(r, selected_targets, library),
         )
         if all(choice.disabled for choice in skill_choices):
-            console.print("No skills deployed to the selected targets.", markup=False)
+            out.note("No skills deployed to the selected targets.")
             raise typer.Exit(0)
         selected_skills = questionary.checkbox(
             "Select skills to undeploy:\n",
@@ -109,16 +109,20 @@ def undeploy(
         ).ask()
 
     if not selected_skills:
-        console.print("Nothing selected.", markup=False)
+        out.note("Nothing selected.")
         raise typer.Exit(0)
 
     # remove each selected skill from each target
+    out.info(
+        f"undeploying {len(selected_skills)} skill(s) from "
+        f"{len(selected_targets)} target(s)"
+    )
     for target in selected_targets:
-        console.print(f"\n{target.name}:", markup=False)
+        out.product(f"\n{target.name}:", raw=True)
         for skill_result in selected_skills:
             target_path = target.path / skill_result.skill.name
             result = remove_skill(target_path, skill_library_path=library)
             line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            console.print(line, markup=False)
+            out.product(line, raw=True)

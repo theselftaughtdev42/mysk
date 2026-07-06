@@ -6,16 +6,18 @@ from pathlib import Path
 import questionary
 import typer
 
-from mysk.console import console, err_console
 from mysk.io.deploy import reconcile_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
 from mysk.io.targets import Target, discover_targets
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     confirm,
     resolve_skill_selection,
 )
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -79,7 +81,7 @@ def deploy(
     deployable, _ = load_skills(library)
 
     if not deployable:
-        console.print("No skills in the Skill Library to deploy.", markup=False)
+        out.note("No skills in the Skill Library to deploy.")
         raise typer.Exit(0)
 
     # resolve the Skill Selection from CLI flags
@@ -88,7 +90,7 @@ def deploy(
             skill=skill, bulk=bulk, select_all=select_all, eligible=deployable
         )
     except SkillSelectionError as exc:
-        err_console.print(str(exc), markup=False)
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     # resolve the Deployment Targets from --agents or an interactive prompt
@@ -97,9 +99,7 @@ def deploy(
         known = {t.name for t in targets}
         unknown = names - known
         if unknown:
-            err_console.print(
-                f"Unknown agent(s): {', '.join(sorted(unknown))}", markup=False
-            )
+            out.error(f"Unknown agent(s): {', '.join(sorted(unknown))}")
             raise typer.Exit(1)
         selected_targets = [t for t in targets if t.name in names]
     else:
@@ -109,7 +109,7 @@ def deploy(
         ).ask()
 
     if not selected_targets:
-        console.print("Nothing selected.", markup=False)
+        out.note("Nothing selected.")
         raise typer.Exit(0)
 
     # fall back to an interactive Skill Selection when no flag picked one
@@ -119,9 +119,7 @@ def deploy(
             relevance=lambda r: _already_deployed(r, selected_targets),
         )
         if all(choice.disabled for choice in skill_choices):
-            console.print(
-                "All skills already deployed to selected target(s).", markup=False
-            )
+            out.note("All skills already deployed to selected target(s).")
             raise typer.Exit(0)
         selected_skills = questionary.checkbox(
             "Select skills to deploy:\n",
@@ -129,15 +127,19 @@ def deploy(
         ).ask()
 
     if not selected_skills:
-        console.print("Nothing selected.", markup=False)
+        out.note("Nothing selected.")
         raise typer.Exit(0)
 
     # deploy each selected skill to each target
+    out.info(
+        f"deploying {len(selected_skills)} skill(s) to "
+        f"{len(selected_targets)} target(s)"
+    )
     for target in selected_targets:
-        console.print(f"\n{target.name}:", markup=False)
+        out.product(f"\n{target.name}:", raw=True)
         created = _ensure_target_dir(target.path)
         if created:
-            console.print(f"  Created {created}", markup=False)
+            out.product(f"  Created {created}", raw=True)
         for skill_result in selected_skills:
             target_path = target.path / skill_result.skill.name
             destroys_real_dir = (
@@ -149,8 +151,8 @@ def deploy(
                     "Replace it?"
                 )
                 if not confirm(message, yes=yes):
-                    console.print(
-                        f"  {skill_result.skill.name}: skipped (declined)", markup=False
+                    out.product(
+                        f"  {skill_result.skill.name}: skipped (declined)", raw=True
                     )
                     continue
             result = reconcile_skill(
@@ -162,4 +164,4 @@ def deploy(
             line = f"  {skill_result.skill.name}: {result.outcome}"
             if result.reason:
                 line += f" ({result.reason})"
-            console.print(line, markup=False)
+            out.product(line, raw=True)

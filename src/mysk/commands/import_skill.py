@@ -10,7 +10,6 @@ import typer
 from rich.markup import escape
 from rich.rule import Rule
 
-from mysk.console import console, err_console
 from mysk.domain.import_url import ImportUrl, RepoRootUrl
 from mysk.domain.lifecycle import LifecycleState
 from mysk.domain.mysk_block import MyskBlock
@@ -25,6 +24,9 @@ from mysk.io.skills import (
     load_skills,
     skill_library,
 )
+from mysk.output import Output
+
+out = Output(__name__)
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -71,7 +73,7 @@ def _import_from_local_dir(path: Path) -> None:
     )
 
     if not skill_dirs:
-        err_console.print("[red]Error:[/red] No skills found in this directory.")
+        out.error("No skills found in this directory.")
         raise typer.Exit(1)
 
     # let the user choose which skills to import
@@ -90,8 +92,8 @@ def _import_from_local_dir(path: Path) -> None:
     for i, name in enumerate(selected_names, 1):
         skill_dir = skill_dir_map[name]
 
-        console.print()
-        console.print(
+        out.product("")
+        out.product(
             Rule(
                 f"[bold]{escape(name)}[/bold]  [dim]{i} of {total}[/dim]",
                 align="left",
@@ -113,17 +115,14 @@ def _import_from_local_dir(path: Path) -> None:
         try:
             local_skill = Skill.from_frontmatter(data)
         except (ValueError, KeyError) as exc:
-            err_console.print(
-                f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}"
-            )
+            out.error(f"Malformed SKILL.md: {exc}")
             continue
 
         # verify the declared name matches the directory when kept as-is
         if local_name == name and local_skill.name != name:
-            err_console.print(
-                f"[red]Error:[/red] The skill's name field "
-                f"{escape(repr(local_skill.name))} does not match the directory "
-                f"name {escape(repr(name))}. Fix the SKILL.md and re-import."
+            out.error(
+                f"The skill's name field {local_skill.name!r} does not match the "
+                f"directory name {name!r}. Fix the SKILL.md and re-import."
             )
             continue
 
@@ -152,9 +151,9 @@ def _import_from_local_dir(path: Path) -> None:
         imported += 1
 
     # report how many of the selection were imported
-    console.print()
-    console.print(Rule(style="dim"))
-    console.print(
+    out.product("")
+    out.product(Rule(style="dim"))
+    out.product(
         f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills."
     )
 
@@ -164,18 +163,18 @@ def _import_from_repo_root(url: str) -> None:
     try:
         repo_root_url = RepoRootUrl.parse(url)
     except ValueError as exc:
-        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     # scan the repo for directories holding a SKILL.md
     try:
         skill_paths = scan_repo_for_skills(repo_root_url)
     except DownloadError as exc:
-        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     if not skill_paths:
-        err_console.print("[red]Error:[/red] No skills found in this repository.")
+        out.error("No skills found in this repository.")
         raise typer.Exit(1)
 
     # disable skills already imported from the same source, keeping the rest
@@ -202,7 +201,7 @@ def _import_from_repo_root(url: str) -> None:
 
     # nothing left to pick: everything is already imported, so skip the picker
     if already_imported == len(skill_paths):
-        console.print(
+        out.note(
             f"All {already_imported} skills in this repo are already imported. "
             "Run 'mysk refresh' to update them."
         )
@@ -224,8 +223,8 @@ def _import_from_repo_root(url: str) -> None:
         import_url = ImportUrl.parse(skill_url)
         upstream_dir_name = import_url.skill_dir_name
 
-        console.print()
-        console.print(
+        out.product("")
+        out.product(
             Rule(
                 f"[bold]{escape(upstream_dir_name)}[/bold]  [dim]{i} of {total}[/dim]",
                 align="left",
@@ -250,9 +249,9 @@ def _import_from_repo_root(url: str) -> None:
         imported += 1
 
     # report how many of the selection were imported
-    console.print()
-    console.print(Rule(style="dim"))
-    console.print(
+    out.product("")
+    out.product(Rule(style="dim"))
+    out.product(
         f"Imported [bold]{imported}[/bold] of [bold]{total}[/bold] selected skills."
     )
 
@@ -280,19 +279,19 @@ def _resolve_local_name(
     try:
         check_collision(library, preferred, source)
     except CollisionError as exc:
-        err_console.print(f"[red]Collision:[/red] {escape(str(exc))}")
+        out.error(str(exc))
         new_name = questionary.text(prompt).ask()
         if not new_name:
             return None
         try:
             validate_skill_name(new_name)
         except ValueError as ve:
-            err_console.print(f"[red]Error:[/red] {escape(str(ve))}")
+            out.error(str(ve))
             return None
         try:
             check_collision(library, new_name, source)
         except CollisionError as ce:
-            err_console.print(f"[red]Error:[/red] {escape(str(ce))}")
+            out.error(str(ce))
             return None
         return new_name
     return preferred
@@ -313,7 +312,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
     try:
         validate_skill_name(local_name)
     except ValueError as exc:
-        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     library = skill_library()
@@ -331,7 +330,7 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
 
     skill_md_path = path / "SKILL.md"
     if not skill_md_path.exists():
-        err_console.print("[red]Error:[/red] Skill directory has no SKILL.md.")
+        out.error("Skill directory has no SKILL.md.")
         raise typer.Exit(1)
 
     # parse the source skill's frontmatter
@@ -339,15 +338,14 @@ def _import_from_local_path(path: Path, rename: str | None = None) -> None:
     try:
         local_skill = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        err_console.print(f"[red]Error:[/red] Malformed SKILL.md: {escape(str(exc))}")
+        out.error(f"Malformed SKILL.md: {exc}")
         raise typer.Exit(1) from None
 
     # verify the declared name matches the directory when not renaming
     if rename is None and local_skill.name != path.name:
-        err_console.print(
-            f"[red]Error:[/red] The skill's name field "
-            f"{escape(repr(local_skill.name))} does not match the directory name "
-            f"{escape(repr(path.name))}. "
+        out.error(
+            f"The skill's name field {local_skill.name!r} does not match the "
+            f"directory name {path.name!r}. "
             f"Skills must satisfy the Agent Skills naming constraint."
         )
         raise typer.Exit(1)
@@ -386,7 +384,7 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     try:
         validate_skill_name(local_name)
     except ValueError as exc:
-        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        out.error(str(exc))
         raise typer.Exit(1) from None
 
     library = skill_library()
@@ -405,17 +403,18 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
     local_name = resolved_name
 
     # download the upstream skill into a temp staging dir
+    out.info(f"importing {local_name!r} from {url}")
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / local_name
         try:
             download_skill(import_url, tmp_skill_dir)
         except DownloadError as exc:
-            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+            out.error(str(exc))
             raise typer.Exit(1) from None
 
         skill_md_path = tmp_skill_dir / "SKILL.md"
         if not skill_md_path.exists():
-            err_console.print("[red]Error:[/red] Downloaded skill has no SKILL.md.")
+            out.error("Downloaded skill has no SKILL.md.")
             raise typer.Exit(1)
 
         # parse the downloaded skill's frontmatter
@@ -423,18 +422,14 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
         try:
             downloaded_skill = Skill.from_frontmatter(data)
         except (ValueError, KeyError) as exc:
-            err_console.print(
-                f"[red]Error:[/red] Malformed SKILL.md in downloaded skill: "
-                f"{escape(str(exc))}"
-            )
+            out.error(f"Malformed SKILL.md in downloaded skill: {exc}")
             raise typer.Exit(1) from None
 
         # verify the declared name matches the upstream directory
         if downloaded_skill.name != upstream_dir_name:
-            err_console.print(
-                f"[red]Error:[/red] The skill's name field "
-                f"{escape(repr(downloaded_skill.name))} does not match the upstream "
-                f"directory name {escape(repr(upstream_dir_name))}. "
+            out.error(
+                f"The skill's name field {downloaded_skill.name!r} does not match "
+                f"the upstream directory name {upstream_dir_name!r}. "
                 f"Skills must satisfy the Agent Skills naming constraint."
             )
             raise typer.Exit(1)

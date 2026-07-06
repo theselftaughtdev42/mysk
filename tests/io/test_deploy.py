@@ -1,4 +1,22 @@
+import logging
+
 from mysk.io.deploy import reconcile_skill, remove_skill
+
+
+def test_fresh_destination_logs_symlink_creation(tmp_path, caplog):
+    skill_library = tmp_path / "library"
+    skill_library.mkdir()
+    source = skill_library / "my-skill"
+    source.mkdir()
+    target = tmp_path / "targets" / "my-skill"
+    target.parent.mkdir(parents=True)
+
+    with caplog.at_level(logging.DEBUG, logger="mysk"):
+        reconcile_skill(
+            source, target, overwrite=False, skill_library_path=skill_library
+        )
+
+    assert any(str(target) in r.message for r in caplog.records)
 
 
 def test_fresh_destination_creates_symlink_and_returns_deployed(tmp_path):
