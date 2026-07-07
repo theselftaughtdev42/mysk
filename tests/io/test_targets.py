@@ -1,7 +1,18 @@
 from pathlib import Path
 
+import pytest
+
 from mysk.domain import LifecycleState, MyskBlock, Skill
-from mysk.io.targets import Target, discover_targets, is_deployed
+from mysk.io.targets import (
+    Target,
+    UnknownAgentsError,
+    discover_targets,
+    is_deployed,
+    narrow_targets,
+)
+
+_CLAUDE = Target(name="claude", path=Path("/home/user/.claude/skills"))
+_CURSOR = Target(name="cursor", path=Path("/home/user/.cursor/skills"))
 
 
 def test_target_label_uses_tilde_for_home_relative_paths():
@@ -13,6 +24,28 @@ def test_target_label_uses_tilde_for_home_relative_paths():
 def test_target_label_uses_absolute_path_when_not_under_home():
     t = Target(name="claude", path=Path("/var/skills"))
     assert t.label() == "/var/skills (claude)"
+
+
+def test_narrow_targets_returns_all_found_when_no_agents_given():
+    assert narrow_targets([_CLAUDE, _CURSOR], None) == [_CLAUDE, _CURSOR]
+
+
+def test_narrow_targets_keeps_only_named_agents_in_discovery_order():
+    assert narrow_targets([_CLAUDE, _CURSOR], "cursor") == [_CURSOR]
+
+
+def test_narrow_targets_ignores_surrounding_whitespace_in_names():
+    assert narrow_targets([_CLAUDE, _CURSOR], " claude , cursor ") == [_CLAUDE, _CURSOR]
+
+
+def test_narrow_targets_raises_with_unknown_and_available_names():
+    with pytest.raises(UnknownAgentsError) as excinfo:
+        narrow_targets([_CLAUDE, _CURSOR], "ghost")
+
+    error = excinfo.value
+    assert error.unknown == ["ghost"]
+    assert error.available == ["claude", "cursor"]
+    assert str(error) == "Unknown agent(s): ghost. Available: claude, cursor"
 
 
 def test_is_deployed_false_when_symlink_points_outside_library(tmp_path):

@@ -39,7 +39,7 @@ def _run(
 
 
 def _capture_skill_choices(monkeypatch, *, targets, skills, is_deployed_fn=None):
-    stub = QuestionaryStub(list(targets), [])
+    stub = QuestionaryStub([])
     _run(
         monkeypatch,
         targets=targets,
@@ -81,9 +81,7 @@ def test_summary_printed_per_target_with_outcomes(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub(
-            [_CLAUDE_TARGET, _CURSOR_TARGET], [_ACTIVE_SKILL]
-        ),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
     )
 
@@ -109,6 +107,56 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
     assert not any("target" in m.lower() for m in stub.prompted_messages())
     assert "claude" in result.output
     assert "cursor" not in result.output
+
+
+def test_no_agents_flag_fans_out_to_all_found_targets_and_prints_roster(monkeypatch):
+    stub = QuestionaryStub([_ACTIVE_SKILL])
+    targets = [_CLAUDE_TARGET, _CURSOR_TARGET]
+
+    result = _run(
+        monkeypatch,
+        targets=targets,
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=stub,
+        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+    )
+
+    assert result.exit_code == 0
+    # no target prompt is shown — only the skill picker
+    assert not any("target" in m.lower() for m in stub.prompted_messages())
+    # the resolved roster names every found target, before the per-target report
+    assert "Undeploying from 2 targets: claude, cursor" in result.output
+    # and the skill is removed from every found target
+    assert result.output.count("foo: removed") == len(targets)
+
+
+def test_no_targets_found_exits_before_skill_prompt(monkeypatch):
+    stub = QuestionaryStub()
+
+    result = _run(
+        monkeypatch,
+        targets=[],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=stub,
+    )
+
+    assert result.exit_code == 0
+    assert "no deployment targets found" in result.output.lower()
+    assert stub.prompted_messages() == []
+
+
+def test_unknown_agent_error_lists_available_target_names(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
+        skills=[_ACTIVE_SKILL],
+        extra_args=["--agents", "ghost"],
+    )
+
+    assert result.exit_code == 1
+    assert "ghost" in result.stderr
+    assert "claude" in result.stderr
+    assert "cursor" in result.stderr
 
 
 def test_skill_positional_removes_named_skill_without_showing_skill_prompt(
@@ -221,7 +269,7 @@ def test_per_target_report_goes_to_stdout(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
     )
 
@@ -242,7 +290,7 @@ def test_unknown_skill_name_in_bulk_flag_exits_with_error(monkeypatch):
     assert "ghost" in result.output
 
 
-def test_nothing_selected_at_target_prompt_exits_cleanly(monkeypatch):
+def test_nothing_selected_at_skill_prompt_exits_cleanly(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
@@ -254,24 +302,12 @@ def test_nothing_selected_at_target_prompt_exits_cleanly(monkeypatch):
     assert "Nothing selected." in result.output
 
 
-def test_nothing_selected_at_skill_prompt_exits_cleanly(monkeypatch):
-    result = _run(
-        monkeypatch,
-        targets=[_CLAUDE_TARGET],
-        skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], []),
-    )
-
-    assert result.exit_code == 0
-    assert "Nothing selected." in result.output
-
-
 def test_skip_reason_is_printed_alongside_outcome(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         remove_fn=lambda t, skill_library_path: RemoveResult(
             outcome="skipped", reason="not deployed"
         ),
