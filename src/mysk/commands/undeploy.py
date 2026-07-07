@@ -8,7 +8,13 @@ import typer
 
 from mysk.io.deploy import remove_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
-from mysk.io.targets import Target, discover_targets, is_deployed
+from mysk.io.targets import (
+    Target,
+    UnknownAgentsError,
+    discover_targets,
+    is_deployed,
+    narrow_targets,
+)
 from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
@@ -42,7 +48,7 @@ def undeploy(
     agents: str | None = typer.Option(
         None,
         "--agents",
-        help="Comma-separated agent names to target; skips the target prompt.",
+        help="Comma-separated agent names; defaults to all found.",
     ),
     bulk: str | None = typer.Option(
         None,
@@ -59,9 +65,26 @@ def undeploy(
     # discover the available Deployment Targets
     targets = discover_targets()
 
+    # resolve the Deployment Targets
+    if not targets:
+        out.note("No Deployment Targets found. Nothing to undeploy from.")
+        raise typer.Exit(0)
+    try:
+        selected_targets = narrow_targets(targets, agents)
+    except UnknownAgentsError as exc:
+        out.error(str(exc))
+        raise typer.Exit(1) from None
+
     # load skills from the Skill Library
     library = skill_library()
     deployable, _ = load_skills(library)
+
+    # announce the resolved target roster before any filesystem changes
+    out.product(
+        f"Undeploying from {len(selected_targets)} targets: "
+        f"{', '.join(t.name for t in selected_targets)}",
+        raw=True,
+    )
 
     # resolve the Skill Selection from CLI flags
     try:
@@ -74,25 +97,6 @@ def undeploy(
     except SkillSelectionError as exc:
         out.error(str(exc))
         raise typer.Exit(1) from None
-
-    # resolve the Deployment Targets from --agents or an interactive prompt
-    if agents is not None:
-        names = {n.strip() for n in agents.split(",")}
-        known = {t.name for t in targets}
-        unknown = names - known
-        if unknown:
-            out.error(f"Unknown agent(s): {', '.join(sorted(unknown))}")
-            raise typer.Exit(1)
-        selected_targets = [t for t in targets if t.name in names]
-    else:
-        selected_targets = questionary.checkbox(
-            "Select deployment targets:\n",
-            choices=[questionary.Choice(t.label(), value=t) for t in targets],
-        ).ask()
-
-    if not selected_targets:
-        out.note("Nothing selected.")
-        raise typer.Exit(0)
 
     # fall back to an interactive Skill Selection when no flag picked one
     if selected_skills is None:

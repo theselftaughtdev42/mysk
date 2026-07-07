@@ -37,9 +37,7 @@ def _run(
 
 
 def _capture_skill_choices(monkeypatch, *, targets, skills, skill_answer=None):
-    stub = QuestionaryStub(
-        list(targets), skill_answer if skill_answer is not None else []
-    )
+    stub = QuestionaryStub(skill_answer if skill_answer is not None else [])
     _run(monkeypatch, targets=targets, skills=skills, questionary_stub=stub)
     skill_choices = stub.choices_for("skill")
     return {choice.value.skill.name: choice.disabled for choice in skill_choices}
@@ -75,6 +73,58 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
     assert not any("target" in m.lower() for m in stub.prompted_messages())
     assert "claude" in result.output
     assert "cursor" not in result.output
+
+
+def test_no_agents_flag_fans_out_to_all_found_targets_and_prints_roster(monkeypatch):
+    stub = QuestionaryStub([_ACTIVE_SKILL])
+    targets = [_CLAUDE_TARGET, _CURSOR_TARGET]
+
+    result = _run(
+        monkeypatch,
+        targets=targets,
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=stub,
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+            outcome="deployed"
+        ),
+    )
+
+    assert result.exit_code == 0
+    # no target prompt is shown — only the skill picker
+    assert not any("target" in m.lower() for m in stub.prompted_messages())
+    # the resolved roster names every found target, before the per-target report
+    assert "Deploying to 2 targets: claude, cursor" in result.output
+    # and the skill lands in every found target
+    assert result.output.count("foo: deployed") == len(targets)
+
+
+def test_no_targets_found_exits_before_skill_prompt(monkeypatch):
+    stub = QuestionaryStub()
+
+    result = _run(
+        monkeypatch,
+        targets=[],
+        skills=[_ACTIVE_SKILL],
+        questionary_stub=stub,
+    )
+
+    assert result.exit_code == 0
+    assert "no deployment targets found" in result.output.lower()
+    assert stub.prompted_messages() == []
+
+
+def test_unknown_agent_error_lists_available_target_names(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
+        skills=[_ACTIVE_SKILL],
+        extra_args=["--agents", "ghost"],
+    )
+
+    assert result.exit_code == 1
+    assert "ghost" in result.stderr
+    assert "claude" in result.stderr
+    assert "cursor" in result.stderr
 
 
 def test_bulk_flag_deploys_named_skills_without_showing_skill_prompt(monkeypatch):
@@ -213,7 +263,7 @@ def test_per_target_report_goes_to_stdout(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
             outcome="deployed"
         ),
@@ -224,7 +274,7 @@ def test_per_target_report_goes_to_stdout(monkeypatch):
 
 
 def test_all_skills_with_mysk_block_appear_in_skill_prompt_as_name_state(monkeypatch):
-    stub = QuestionaryStub([_CLAUDE_TARGET], [])
+    stub = QuestionaryStub([])
 
     _run(
         monkeypatch,
@@ -386,10 +436,7 @@ def test_summary_printed_per_target_with_outcomes(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
-        questionary_stub=QuestionaryStub(
-            [_CLAUDE_TARGET, _CURSOR_TARGET],
-            [_ACTIVE_SKILL, _EXPERIMENTAL_SKILL],
-        ),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL, _EXPERIMENTAL_SKILL]),
         reconcile_fn=reconcile,
     )
 
@@ -401,18 +448,6 @@ def test_summary_printed_per_target_with_outcomes(monkeypatch):
 
 
 def test_nothing_selected_at_skill_prompt_exits_cleanly(monkeypatch):
-    result = _run(
-        monkeypatch,
-        targets=[_CLAUDE_TARGET],
-        skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], []),
-    )
-
-    assert result.exit_code == 0
-    assert "Nothing selected." in result.output
-
-
-def test_nothing_selected_at_target_prompt_exits_cleanly(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
@@ -435,7 +470,7 @@ def test_overwrite_flag_passes_overwrite_true_to_reconcile(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         reconcile_fn=reconcile,
         extra_args=["--overwrite"],
     )
@@ -454,7 +489,7 @@ def test_without_overwrite_flag_passes_overwrite_false_to_reconcile(monkeypatch)
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         reconcile_fn=reconcile,
     )
 
@@ -472,7 +507,7 @@ def test_skip_reason_is_printed_alongside_outcome(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([_CLAUDE_TARGET], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         reconcile_fn=reconcile,
     )
 
@@ -490,7 +525,7 @@ def test_existing_target_dir_is_not_reported_as_created(monkeypatch, tmp_path):
         monkeypatch,
         targets=[target],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([target], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
             outcome="deployed"
         ),
@@ -511,7 +546,7 @@ def test_missing_skills_dir_is_created_and_reported(monkeypatch, tmp_path):
         monkeypatch,
         targets=[target],
         skills=[_ACTIVE_SKILL],
-        questionary_stub=QuestionaryStub([target], [_ACTIVE_SKILL]),
+        questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
         reconcile_fn=lambda s, t, o, skill_library_path: ReconcileResult(
             outcome="deployed"
         ),
@@ -542,7 +577,7 @@ def test_overwrite_into_real_directory_prompts_and_declining_makes_no_changes(
         monkeypatch,
         targets=[target],
         skills=[skill],
-        questionary_stub=QuestionaryStub([target], [skill]),
+        questionary_stub=QuestionaryStub([skill]),
         reconcile_fn=lambda s, t, overwrite, skill_library_path: (_ for _ in ()).throw(
             AssertionError("reconcile_skill should not run when declined")
         ),
@@ -578,7 +613,7 @@ def test_overwrite_into_real_directory_with_yes_flag_skips_confirmation(
         monkeypatch,
         targets=[target],
         skills=[skill],
-        questionary_stub=QuestionaryStub([target], [skill]),
+        questionary_stub=QuestionaryStub([skill]),
         reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
             outcome="overwritten"
         ),
@@ -613,7 +648,7 @@ def test_overwrite_into_symlink_collision_does_not_prompt(monkeypatch, tmp_path)
         monkeypatch,
         targets=[target],
         skills=[skill],
-        questionary_stub=QuestionaryStub([target], [skill]),
+        questionary_stub=QuestionaryStub([skill]),
         reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
             outcome="overwritten"
         ),
@@ -646,7 +681,7 @@ def test_overwrite_into_real_directory_without_overwrite_flag_does_not_prompt(
         monkeypatch,
         targets=[target],
         skills=[skill],
-        questionary_stub=QuestionaryStub([target], [skill]),
+        questionary_stub=QuestionaryStub([skill]),
         reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
             outcome="skipped", reason="directory already exists"
         ),
