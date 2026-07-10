@@ -34,6 +34,8 @@ repos:
     - id: mixed-line-ending
     - id: name-tests-test
       args: [--pytest-test-first]
+      # per-command test-support modules are helpers, not test cases
+      exclude: '_[^/]*_support\.py$'
     - id: debug-statements
     - id: no-commit-to-branch
       args: [--branch, main]
