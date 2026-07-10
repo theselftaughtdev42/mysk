@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from rich.console import Console
 from typer.testing import CliRunner
 
 from mysk.cli import app
@@ -222,6 +223,20 @@ def test_upstream_urls_renders_full_url_without_truncation(monkeypatch):
     assert result.exit_code == 0
     # a truncated cell would show Rich's ellipsis; the URL must survive in full
     assert "…" not in result.output
+
+
+def test_upstream_url_cell_renders_a_clickable_hyperlink():
+    # the CliRunner console is non-tty and strips hyperlinks, so render the cell
+    # through a forced-terminal console to observe the OSC 8 escape a terminal
+    # uses to make the URL clickable even when the cell folds across lines
+    url = "https://github.com/someorg/somerepo/tree/main/skills/some-very-long-skill"
+    console = Console(force_terminal=True, width=200)
+    with console.capture() as capture:
+        console.print(list_cmd._upstream_url_cell(url))
+    rendered = capture.get()
+
+    assert "\x1b]8;" in rendered  # OSC 8 hyperlink sequence
+    assert url in rendered  # link target is the full source URL
 
 
 def test_malformed_skill_shows_em_dash_in_upstream_and_modified(monkeypatch):

@@ -3,8 +3,11 @@
 from typing import Annotated
 
 import typer
+from rich.console import RenderableType
 from rich.markup import escape
+from rich.style import Style
 from rich.table import Table
+from rich.text import Text
 
 from mysk.domain.lifecycle import LifecycleState
 from mysk.io.skills import load_skills, skill_library
@@ -18,6 +21,17 @@ app = typer.Typer(
 )
 
 _HIGHLIGHTED = {LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL}
+
+
+def _upstream_url_cell(source: str | None) -> RenderableType:
+    """Render the Upstream URL cell: a clickable link to *source*, or — if standalone.
+
+    The URL is wrapped in an OSC 8 hyperlink so terminals can open it on click
+    even though the cell folds the visible text across lines.
+    """
+    if source is None:
+        return "—"
+    return Text(source, style=Style(link=source))
 
 
 @app.callback()
@@ -54,9 +68,9 @@ def list_skills(
         state = r.mysk.state
         prov = r.mysk.provenance
         if upstream_urls:
-            upstream_label = escape(prov.source) if prov.source is not None else "—"
+            upstream_cell: RenderableType = _upstream_url_cell(prov.source)
         else:
-            upstream_label = "yes" if prov.has_upstream else "no"
+            upstream_cell = "yes" if prov.has_upstream else "no"
         # modified is meaningful only with an upstream; standalone skills read "—"
         if prov.has_upstream:
             modified_label = "yes" if prov.modified else "no"
@@ -69,15 +83,17 @@ def list_skills(
             table.add_row(
                 f"[bold]{name}[/bold]",
                 state.value,
-                upstream_label,
+                upstream_cell,
                 modified_label,
                 deployed_label,
             )
         else:
+            # the whole row is dimmed via style="dim"; the upstream cell is passed
+            # as-is so a hyperlink Text keeps its link (dim layers over it)
             table.add_row(
                 f"[dim]{name}[/dim]",
                 f"[dim]{state.value}[/dim]",
-                f"[dim]{upstream_label}[/dim]",
+                upstream_cell,
                 f"[dim]{modified_label}[/dim]",
                 f"[dim]{deployed_label}[/dim]",
                 style="dim",
