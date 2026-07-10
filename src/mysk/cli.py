@@ -1,5 +1,8 @@
 """Entry point for the mysk CLI application."""
 
+from importlib.metadata import version
+from typing import Annotated
+
 import typer
 
 from mysk.commands import (
@@ -16,6 +19,9 @@ from mysk.commands import (
     list as list_skills,
 )
 from mysk.logging_config import configure_logging
+from mysk.output import Output
+
+out = Output(__name__)
 
 app = typer.Typer(
     name="mysk",
@@ -25,12 +31,35 @@ app = typer.Typer(
 )
 
 
+def _version_callback(*, value: bool) -> None:
+    """Print `mysk {version}` and exit early when `--version` is passed.
+
+    Runs eagerly, before `main` — so it short-circuits ahead of logging setup
+    and any subcommand. The version comes from installed package metadata, the
+    single source of truth backed by `pyproject.toml`.
+    """
+    if value:
+        out.product(f"mysk {version('mysk')}", raw=True)
+        raise typer.Exit
+
+
 @app.callback()
-def main() -> None:
+def main(
+    *,
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show the installed version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
     """Initialise mysk's diagnostic logging channel once per invocation.
 
-    Takes no parameters, so it introduces no CLI flag; it only reads
-    `MYSK_LOG_LEVEL` (via `configure_logging`) at startup.
+    Exposes the eager `--version` flag; otherwise reads `MYSK_LOG_LEVEL` (via
+    `configure_logging`) at startup.
     """
     configure_logging()
 

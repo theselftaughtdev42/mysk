@@ -10,6 +10,7 @@ $ mysk [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
+* `--version`: Show the installed version and exit.
 * `--install-completion`: Install completion for the current shell.
 * `--show-completion`: Show completion for the current shell, to copy it or customize the installation.
 * `--help`: Show this message and exit.
@@ -52,15 +53,20 @@ Deploy skills to selected Deployment Targets.
 **Usage**:
 
 ```console
-$ mysk deploy [OPTIONS] COMMAND [ARGS]...
+$ mysk deploy [OPTIONS] [SKILL] COMMAND [ARGS]...
 ```
+
+**Arguments**:
+
+* `[SKILL]`: Name of a single skill to deploy.
 
 **Options**:
 
 * `--overwrite`: Replace non-symlink directories at collision paths.
-* `--agents TEXT`: Comma-separated agent names to target; skips the target prompt.
-* `--skills TEXT`: Comma-separated skill names to deploy; skips the skill prompt.
-* `--skills-all`: Deploy every skill without prompting; skips the skill prompt.
+* `--agents TEXT`: Comma-separated agent names; defaults to all found.
+* `--bulk TEXT`: Comma-separated skill names to deploy; skips the skill prompt.
+* `--all`: Deploy every skill without prompting; skips the skill prompt.
+* `--yes`: Skip confirmation before replacing a real directory.
 * `--help`: Show this message and exit.
 
 ## `mysk cleanup`
@@ -75,6 +81,9 @@ $ mysk cleanup [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
+* `--bulk TEXT`: Comma-separated deprecated skill names to clean up; skips the picker.
+* `--all`: Clean up every deprecated skill without prompting; skips the picker.
+* `--yes`: Skip confirmation prompt.
 * `--help`: Show this message and exit.
 
 ## `mysk delete`
@@ -84,15 +93,17 @@ Delete a skill from the Skill Library and all Deployment Targets.
 **Usage**:
 
 ```console
-$ mysk delete [OPTIONS] NAME COMMAND [ARGS]...
+$ mysk delete [OPTIONS] [NAME] COMMAND [ARGS]...
 ```
 
 **Arguments**:
 
-* `NAME`: Name of the skill to delete.  [required]
+* `[NAME]`: Name of the skill to delete.
 
 **Options**:
 
+* `--bulk TEXT`: Comma-separated skill names to delete; skips the picker.
+* `--all`: Delete every skill in the Skill Library without prompting.
 * `--yes`: Skip confirmation prompt.
 * `--help`: Show this message and exit.
 
@@ -122,6 +133,7 @@ $ mysk list [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
+* `--upstream-urls`: Show each skill&#x27;s upstream source URL instead of a yes/no column.
 * `--help`: Show this message and exit.
 
 ## `mysk mark`
@@ -140,6 +152,8 @@ $ mysk mark [OPTIONS] [SKILL_NAME] COMMAND [ARGS]...
 
 **Options**:
 
+* `--bulk TEXT`: Comma-separated skill names to mark; skips the picker.
+* `--all`: Mark every skill in the Skill Library.
 * `--key TEXT`: Marking to set (status, modified).
 * `--value TEXT`: Value for the marking.
 * `--help`: Show this message and exit.
@@ -160,7 +174,9 @@ $ mysk refresh [OPTIONS] [NAME] COMMAND [ARGS]...
 
 **Options**:
 
+* `--bulk TEXT`: Comma-separated skill names to refresh; skips the picker.
 * `--all`: Refresh all imported skills.
+* `--yes`: Skip confirmation prompt.
 * `--help`: Show this message and exit.
 
 ## `mysk undeploy`
@@ -170,12 +186,16 @@ Remove deployed skills from selected Deployment Targets.
 **Usage**:
 
 ```console
-$ mysk undeploy [OPTIONS] COMMAND [ARGS]...
+$ mysk undeploy [OPTIONS] [SKILL] COMMAND [ARGS]...
 ```
+
+**Arguments**:
+
+* `[SKILL]`: Name of a single skill to undeploy.
 
 **Options**:
 
-* `--agents TEXT`: Comma-separated agent names to target; skips the target prompt.
-* `--skills TEXT`: Comma-separated skill names to undeploy; skips the skill prompt.
-* `--skills-all`: Undeploy every deployed skill without prompting; skips the skill prompt.
+* `--agents TEXT`: Comma-separated agent names; defaults to all found.
+* `--bulk TEXT`: Comma-separated skill names to undeploy; skips the skill prompt.
+* `--all`: Undeploy every skill without prompting; skips the skill prompt.
 * `--help`: Show this message and exit.
