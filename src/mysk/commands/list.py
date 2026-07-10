@@ -1,5 +1,7 @@
 """Command to list all skills and their deployment status."""
 
+from typing import Annotated
+
 import typer
 from rich.markup import escape
 from rich.table import Table
@@ -19,7 +21,16 @@ _HIGHLIGHTED = {LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL}
 
 
 @app.callback()
-def list_skills() -> None:
+def list_skills(
+    *,
+    upstream_urls: Annotated[
+        bool,
+        typer.Option(
+            "--upstream-urls",
+            help="Show each skill's upstream source URL instead of a yes/no column.",
+        ),
+    ] = False,
+) -> None:
     """List all skills and where they are deployed."""
     # load skills from the Skill Library and discover Deployment Targets
     library = skill_library()
@@ -29,18 +40,28 @@ def list_skills() -> None:
     table = Table(show_header=True, header_style="bold", show_lines=True)
     table.add_column("Name")
     table.add_column("Status")
-    table.add_column("Provenance")
+    # the upstream column is either a yes/no fact or the full source URL; the URL
+    # is folded (wrapped) rather than truncated so it is always shown in full
+    if upstream_urls:
+        table.add_column("Upstream URL", overflow="fold")
+    else:
+        table.add_column("Has Upstream")
+    table.add_column("Modified")
     table.add_column("Deployed To")
 
-    # render each installed skill with its status, provenance, and where deployed
+    # render each installed skill with its upstream/modified facts and where deployed
     for r in installed:
         state = r.mysk.state
         prov = r.mysk.provenance
-        provenance_label = (
-            ("imported ⚠ modified" if prov.modified else "imported")
-            if prov.is_imported
-            else "self-authored"
-        )
+        if upstream_urls:
+            upstream_label = escape(prov.source) if prov.source is not None else "—"
+        else:
+            upstream_label = "yes" if prov.has_upstream else "no"
+        # modified is meaningful only with an upstream; standalone skills read "—"
+        if prov.has_upstream:
+            modified_label = "yes" if prov.modified else "no"
+        else:
+            modified_label = "—"
         deployed_to = [t for t in targets if is_deployed(t, r.skill, library)]
         deployed_label = escape("\n".join(t.label() for t in deployed_to) or "—")
         name = escape(r.skill.name)
@@ -48,14 +69,16 @@ def list_skills() -> None:
             table.add_row(
                 f"[bold]{name}[/bold]",
                 state.value,
-                provenance_label,
+                upstream_label,
+                modified_label,
                 deployed_label,
             )
         else:
             table.add_row(
                 f"[dim]{name}[/dim]",
                 f"[dim]{state.value}[/dim]",
-                f"[dim]{provenance_label}[/dim]",
+                f"[dim]{upstream_label}[/dim]",
+                f"[dim]{modified_label}[/dim]",
                 f"[dim]{deployed_label}[/dim]",
                 style="dim",
             )
@@ -69,6 +92,7 @@ def list_skills() -> None:
         table.add_row(
             f"[dim]{name}[/dim]",
             f"[dim]{status_label}[/dim]",
+            "[dim]—[/dim]",
             "[dim]—[/dim]",
             "[dim]—[/dim]",
             style="dim",

@@ -303,7 +303,7 @@ def test_import_from_repo_root_disables_already_imported_same_source(
 
 
 @respx.mock
-def test_import_from_repo_root_ignores_self_authored_name_match(library, monkeypatch):
+def test_import_from_repo_root_ignores_standalone_name_match(library, monkeypatch):
     root = RepoRootUrl.parse(_REPO_ROOT_URL)
     existing = library / "my-skill"
     existing.mkdir()
@@ -322,7 +322,7 @@ def test_import_from_repo_root_ignores_self_authored_name_match(library, monkeyp
 
     assert result.exit_code != 0, result.output  # empty selection, no short-circuit
     (choice,) = captured["choices"]
-    assert _disabled_reason(choice) is None  # self-authored: still selectable
+    assert _disabled_reason(choice) is None  # standalone: still selectable
 
 
 @respx.mock
@@ -583,7 +583,7 @@ def test_import_from_local_path_with_rename_fails_on_collision(
     assert result.exit_code != 0
 
 
-def test_import_from_local_path_copies_skill_as_self_authored(
+def test_import_from_local_path_copies_skill_as_standalone(
     tmp_path, monkeypatch, library
 ):
     _mock_select("active", monkeypatch)

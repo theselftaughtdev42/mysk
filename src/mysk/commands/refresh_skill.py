@@ -29,8 +29,8 @@ app = typer.Typer(
 
 
 def _refresh_relevance(result: InstalledSkill) -> str | None:
-    if not result.mysk.provenance.is_imported:
-        return "self-authored — nothing to refresh"
+    if not result.mysk.provenance.has_upstream:
+        return "no upstream — nothing to refresh"
     if result.mysk.provenance.modified:
         return "modified — needs review before refresh"
     return None
@@ -59,7 +59,7 @@ def refresh_skill(
     # gather imported skills from the Skill Library
     library = skill_library()
     installed, _ = load_skills(library)
-    imported = [r for r in installed if r.mysk.provenance.is_imported]
+    imported = [r for r in installed if r.mysk.provenance.has_upstream]
 
     # resolve the Skill Selection from CLI flags
     try:
@@ -123,11 +123,11 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
         out.error(f"Malformed SKILL.md: {exc}")
         raise typer.Exit(1) from None
 
-    # refuse to refresh self-authored or locally modified skills
-    if skill.mysk is None or not skill.mysk.provenance.is_imported:
+    # refuse to refresh skills with no upstream or with local modifications
+    if skill.mysk is None or not skill.mysk.provenance.has_upstream:
         out.error(
-            f"{name!r} is self-authored. "
-            "Only imported skills (with a source URL) can be refreshed."
+            f"{name!r} has no upstream to refresh from. "
+            "Only skills with a source URL can be refreshed."
         )
         raise typer.Exit(1)
 

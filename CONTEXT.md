@@ -1,6 +1,6 @@
 # mysk
 
-A personal collection of agent skills — self-authored or imported — managed and deployed to AI agents via the `mysk` CLI.
+A personal collection of agent skills — standalone or linked to an upstream source — managed and deployed to AI agents via the `mysk` CLI.
 
 ## Language
 
@@ -45,7 +45,7 @@ The operation that brings a skill into the Skill Library for the first time.
 _Avoid_: install, add, migrate, download
 
 **Refresh**:
-The operation that updates an already-imported skill from its `source` URL.
+The operation that updates a skill from its recorded upstream `source` URL. Only skills that have an upstream can be refreshed.
 _Avoid_: update, sync, pull
 
 **Deployment Target**:
@@ -57,7 +57,7 @@ The primary lifecycle state, indicating a skill is ready for regular use. Active
 _Avoid_: live, enabled, ready, stable
 
 **Experimental**:
-A lifecycle state indicating a skill is under active evaluation. It may be self-authored or imported, but is not yet trusted for regular use. Experimental skills are still deployed; they may graduate to active or be deprecated.
+A lifecycle state indicating a skill is under active evaluation. It applies regardless of whether the skill has an upstream, and signals the skill is not yet trusted for regular use. Experimental skills are still deployed; they may graduate to active or be deprecated.
 _Avoid_: draft, WIP, beta
 
 **Deprecated**:
@@ -69,15 +69,15 @@ The operation that permanently removes a skill from the Skill Library and unlink
 _Avoid_: remove, uninstall, drop
 
 **Provenance**:
-Whether a skill was self-authored or imported from an external source.
-_Avoid_: origin, attribution
+What mysk records about where a skill came from. A skill either **has an upstream** — a `source` URL it can be Refreshed from — or is **standalone**, with no source. mysk does not track authorship; whether a skill has an upstream is the only origin distinction it keeps. The derived predicate is `has_upstream` (`source is not None`).
+_Avoid_: origin, attribution, self-authored, imported (as a provenance value)
 
 **Source**:
-The upstream URL of an imported skill, recorded inside the `mysk` frontmatter block. Used to identify where the skill came from and to enable Refresh.
+The upstream URL recorded inside a skill's `mysk` frontmatter block. Its presence is what makes a skill refreshable (has an upstream); it identifies where the skill came from, keys duplicate-import detection, and enables Refresh.
 _Avoid_: url, link, reference
 
 **Modified**:
-A boolean flag inside the `mysk` frontmatter block on imported skills. `false` means the local content is a clean import and can be safely overwritten on Refresh. `true` means the content has been changed locally and requires human review before any upstream Refresh. Covers content changes only — renames are tracked by `upstream_name`.
+A boolean flag inside the `mysk` frontmatter block, meaningful only on skills that have an upstream `source`. `false` means the local content is a clean copy of upstream and can be safely overwritten on Refresh. `true` means the content has been changed locally and requires human review before any upstream Refresh. Structurally inapplicable to standalone skills, which have no upstream to diverge from. Covers content changes only — renames are tracked by `upstream_name`.
 _Avoid_: changed, customised, forked
 
 **Upstream Name**:

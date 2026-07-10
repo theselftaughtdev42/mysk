@@ -32,7 +32,7 @@ _VALID_KEYS = ["status", "modified"]
 
 
 def set_skill_modified(skill_path: Path, *, value: bool) -> None:
-    """Write the `modified` flag on an imported skill's SKILL.md."""
+    """Write the `modified` flag on a skill that has an upstream `source`."""
     text = skill_path.read_text()
     data, body = frontmatter.read(text)
     skill = Skill.from_frontmatter(data).with_modified(value=value)
@@ -78,7 +78,7 @@ def _apply_marking(skill_path: Path, *, value: LifecycleState | bool) -> str | N
     try:
         set_skill_modified(skill_path, value=value)
     except ValueError:
-        return f"{skill_path.parent.name} is self-authored — skipping."
+        return f"{skill_path.parent.name} has no upstream — skipping."
     else:
         return None
 

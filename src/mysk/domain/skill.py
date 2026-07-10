@@ -57,9 +57,9 @@ class Skill(BaseModel):
         )
 
     def with_modified(self, *, value: bool) -> "Skill":
-        """Return a copy with the `modified` flag updated; raises if self-authored."""
-        if self.mysk is None or not self.mysk.provenance.is_imported:
-            msg = "skill is self-authored; modified only applies to imported skills"
+        """Return a copy with the `modified` flag updated; raises if no upstream."""
+        if self.mysk is None or not self.mysk.provenance.has_upstream:
+            msg = "skill has no upstream; modified only applies to skills with a source"
             raise ValueError(msg)
         new_prov = self.mysk.provenance.model_copy(update={"modified": value})
         new_block = self.mysk.model_copy(update={"provenance": new_prov})
@@ -83,7 +83,7 @@ class Skill(BaseModel):
         result.update(self.extra_fields)
         if self.mysk is not None:
             block: dict[str, Any] = {"state": self.mysk.state.value}
-            if self.mysk.provenance.is_imported:
+            if self.mysk.provenance.has_upstream:
                 block["source"] = self.mysk.provenance.source
                 block["modified"] = self.mysk.provenance.modified
                 if self.mysk.provenance.upstream_name is not None:

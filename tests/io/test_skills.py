@@ -159,7 +159,7 @@ def test_imported_skill_carries_provenance(tmp_path):
     _skill(tmp_path, "foo", fm)
     installed, _ = load_skills(tmp_path)
     r = installed[0]
-    assert r.mysk.provenance.is_imported
+    assert r.mysk.provenance.has_upstream
     assert not r.mysk.provenance.modified
 
 
@@ -199,7 +199,7 @@ def test_collision_same_name_different_source_reports_conflict(tmp_path):
         check_collision(tmp_path, "my-skill", _SOURCE_A)
 
 
-def test_collision_self_authored_same_name_reports_conflict(tmp_path):
+def test_collision_standalone_same_name_reports_conflict(tmp_path):
     _skill(
         tmp_path,
         "my-skill",

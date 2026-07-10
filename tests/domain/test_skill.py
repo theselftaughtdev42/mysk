@@ -155,7 +155,7 @@ def test_reads_owned_active_skill():
 
     assert skill.mysk is not None
     assert skill.mysk.state is LifecycleState.ACTIVE
-    assert skill.mysk.provenance.is_imported is False
+    assert skill.mysk.provenance.has_upstream is False
 
 
 def test_reads_imported_experimental_skill():
@@ -280,21 +280,21 @@ def test_with_modified_sets_modified_false_on_imported_skill():
     assert updated.mysk.provenance.modified is False
 
 
-def test_with_modified_raises_for_self_authored_skill():
+def test_with_modified_raises_for_standalone_skill():
     skill = Skill(
         name="foo",
         description="bar",
         mysk=MyskBlock(state=LifecycleState.ACTIVE),
     )
 
-    with pytest.raises(ValueError, match="self-authored"):
+    with pytest.raises(ValueError, match="no upstream"):
         skill.with_modified(value=True)
 
 
 def test_with_modified_raises_for_unmigrated_skill():
     skill = Skill(name="foo", description="bar")
 
-    with pytest.raises(ValueError, match="self-authored"):
+    with pytest.raises(ValueError, match="no upstream"):
         skill.with_modified(value=True)
 
 

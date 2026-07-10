@@ -63,7 +63,7 @@ def _installed_skill_md(
     return "\n".join(lines)
 
 
-def _self_authored_skill_md(name: str = "my-skill", description: str = "mine") -> str:
+def _standalone_skill_md(name: str = "my-skill", description: str = "mine") -> str:
     return (
         f"---\nname: {name}\ndescription: {description}\nmysk:\n  state: active\n---\n"
     )
@@ -75,7 +75,7 @@ def _self_authored_skill_md(name: str = "my-skill", description: str = "mine") -
 def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, library):
     (library / "self").mkdir()
     (library / "self" / "SKILL.md").write_text(
-        _self_authored_skill_md(name="self", description="self-authored")
+        _standalone_skill_md(name="self", description="a standalone skill")
     )
     (library / "dirty").mkdir()
     (library / "dirty" / "SKILL.md").write_text(
@@ -99,7 +99,7 @@ def test_refresh_no_args_shows_picker_with_disabled_reasons(monkeypatch, library
 
     assert result.exit_code == 0
     reasons = {c.value.dir.name: c.disabled for c in stub.choices_for("refresh")}
-    assert reasons["self"] == "self-authored — nothing to refresh"
+    assert reasons["self"] == "no upstream — nothing to refresh"
     assert reasons["dirty"] == "modified — needs review before refresh"
     assert reasons["clean"] is None
 
@@ -173,18 +173,18 @@ def test_refresh_success_message_goes_to_stdout(monkeypatch, library):
     assert "Refreshed" in result.stdout
 
 
-# --- 3. Self-authored skill (no source) -------------------------------------
+# --- 3. Standalone skill (no source) ----------------------------------------
 
 
-def test_refresh_self_authored_skill_errors(monkeypatch, library):
+def test_refresh_standalone_skill_errors(monkeypatch, library):
     skill_dir = library / "my-skill"
     skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text(_self_authored_skill_md())
+    (skill_dir / "SKILL.md").write_text(_standalone_skill_md())
 
     result = _run(monkeypatch, extra_args=["my-skill"])
 
     assert result.exit_code != 0
-    assert "imported" in result.output.lower()
+    assert "no upstream" in result.output.lower()
 
 
 # --- 4. modified: true guard ------------------------------------------------
@@ -367,7 +367,7 @@ def test_refresh_all_and_name_errors(monkeypatch, library):
 def test_refresh_all_no_imported_skills(monkeypatch, library):
     skill_dir = library / "my-skill"
     skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text(_self_authored_skill_md())
+    (skill_dir / "SKILL.md").write_text(_standalone_skill_md())
 
     result = _run(monkeypatch, extra_args=["--all"])
 
@@ -617,9 +617,9 @@ def test_refresh_bulk_unknown_skill_errors(monkeypatch, library):
     assert "ghost" in result.output
 
 
-def test_refresh_bulk_self_authored_skill_name_errors(monkeypatch, library):
+def test_refresh_bulk_standalone_skill_name_errors(monkeypatch, library):
     (library / "self").mkdir()
-    (library / "self" / "SKILL.md").write_text(_self_authored_skill_md(name="self"))
+    (library / "self" / "SKILL.md").write_text(_standalone_skill_md(name="self"))
 
     result = _run(monkeypatch, extra_args=["--bulk", "self"])
 
