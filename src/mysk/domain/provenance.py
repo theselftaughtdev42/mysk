@@ -1,13 +1,14 @@
-"""Provenance model: tracks whether a skill is self-authored or imported."""
+"""Provenance model: tracks whether a skill has an upstream or is standalone."""
 
 from pydantic import BaseModel, ConfigDict
 
 
 class Provenance(BaseModel):
-    """Whether a skill is self-authored or imported from an external source.
+    """Whether a skill has an upstream `source` or is standalone.
 
-    A `source` URL marks the skill as imported; `modified` tracks whether the
-    local copy has drifted from upstream. Self-authored skills carry neither.
+    A `source` URL means the skill has an upstream it can be refreshed from;
+    `modified` tracks whether the local copy has drifted from that upstream.
+    Standalone skills carry neither.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -17,6 +18,6 @@ class Provenance(BaseModel):
     upstream_name: str | None = None
 
     @property
-    def is_imported(self) -> bool:
-        """Return True when this skill was imported from an external source URL."""
+    def has_upstream(self) -> bool:
+        """Return True when this skill has an upstream `source` URL to refresh from."""
         return self.source is not None

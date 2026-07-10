@@ -258,7 +258,7 @@ def _import_from_repo_root(url: str) -> None:
 
 def _imported_by_source(library: Path) -> dict[str, str]:
     # map each imported skill's source URL to its local name, skipping
-    # self-authored skills (no source); malformed skills are already excluded
+    # standalone skills (no source); malformed skills are already excluded
     # by load_skills' error channel and never participate in detection
     imported: dict[str, str] = {}
     installed, _ = load_skills(library)

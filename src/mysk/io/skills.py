@@ -98,7 +98,7 @@ def check_collision(library: Path, name: str, source: str | None) -> None:
     Three cases:
     - Same name + same source  → suggest `mysk refresh <name>`
     - Same name + different source → suggest `--rename`
-    - Same name + self-authored (no source) → suggest `--rename`
+    - Same name + standalone (no source) → suggest `--rename`
     """
     # no skill by that name yet: no collision
     skill_md = library / name / "SKILL.md"

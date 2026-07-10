@@ -54,13 +54,13 @@ def test_set_modified_writes_false_on_imported_skill(tmp_path):
     assert "modified: false" in path.read_text()
 
 
-def test_set_modified_raises_for_self_authored_skill(tmp_path):
+def test_set_modified_raises_for_standalone_skill(tmp_path):
     path = _skill(
         tmp_path,
         "foo",
         "name: foo\ndescription: d\nmysk:\n  state: active\n",
     )
-    with pytest.raises(ValueError, match="self-authored"):
+    with pytest.raises(ValueError, match="no upstream"):
         mark.set_skill_modified(path, value=True)
 
 
@@ -184,7 +184,7 @@ def test_noninteractive_errors_for_invalid_modified_value(monkeypatch, tmp_path)
     assert "invalid value for modified" in result.output.lower()
 
 
-def test_noninteractive_errors_for_modified_on_self_authored(monkeypatch, tmp_path):
+def test_noninteractive_errors_for_modified_on_standalone(monkeypatch, tmp_path):
     _skill(tmp_path, "foo", "name: foo\ndescription: d\nmysk:\n  state: active\n")
     result = _run(
         monkeypatch,
@@ -192,7 +192,7 @@ def test_noninteractive_errors_for_modified_on_self_authored(monkeypatch, tmp_pa
         extra_args=("foo", "--key", "modified", "--value", "true"),
     )
     assert result.exit_code != 0
-    assert "self-authored" in result.output.lower()
+    assert "no upstream" in result.output.lower()
 
 
 def test_error_goes_to_stderr(monkeypatch, tmp_path):
@@ -365,7 +365,7 @@ def test_skill_and_bulk_together_exit_with_mutual_exclusivity_error(
     assert "mutually exclusive" in result.output.lower()
 
 
-def test_interactive_modified_warns_and_skips_self_authored(monkeypatch, tmp_path):
+def test_interactive_modified_warns_and_skips_standalone(monkeypatch, tmp_path):
     imported = _skill(
         tmp_path, "imp", _IMPORTED_FM.format(name="imp", modified="false")
     )

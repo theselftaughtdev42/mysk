@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from rich.console import Console
 from typer.testing import CliRunner
 
 from mysk.cli import app
@@ -13,6 +14,10 @@ runner = CliRunner()
 _ACTIVE_SKILL = make_skill("foo", state=LifecycleState.ACTIVE)
 _DEPRECATED_SKILL = make_skill("old", state=LifecycleState.DEPRECATED)
 _IMPORTED_SKILL = make_skill("ext", source="https://example.com")
+_LONG_URL_SKILL = make_skill(
+    "longurl",
+    source="https://github.com/someorg/somerepo/tree/main/skills/some-very-long-skill",
+)
 _MODIFIED_SKILL = make_skill("mod", source="https://example.com", modified=True)
 _NO_MYSK_BLOCK_SKILL = SkillLoadError(
     path=Path("/fake/skills/legacy/SKILL.md"),
@@ -25,20 +30,30 @@ _BAD_SKILL = SkillLoadError(
 _CLAUDE_TARGET = make_target("claude")
 
 
-def _run(monkeypatch, targets=(), skills=(), deployed_fn=None):
+def _cells(output, name):
+    """Return the trimmed cells of the rendered table row whose Name cell is *name*."""
+    for line in output.splitlines():
+        parts = line.split("│")
+        if len(parts) > 1 and parts[1].strip() == name:
+            return [p.strip() for p in parts[1:-1]]
+    msg = f"no table row for {name!r}"
+    raise AssertionError(msg)
+
+
+def _run(monkeypatch, targets=(), skills=(), deployed_fn=None, args=()):
     installed = [s for s in skills if isinstance(s, InstalledSkill)]
     errors = [s for s in skills if isinstance(s, SkillLoadError)]
     patch_skill_sources(monkeypatch, list_cmd, targets=targets)
     monkeypatch.setattr(list_cmd, "load_skills", lambda _: (installed, errors))
     if deployed_fn is not None:
         monkeypatch.setattr(list_cmd, "is_deployed", deployed_fn)
-    return runner.invoke(app, ["list"])
+    return runner.invoke(app, ["list", *args])
 
 
-def test_provenance_column_appears_in_list_output(monkeypatch):
+def test_has_upstream_column_appears_in_list_output(monkeypatch):
     result = _run(monkeypatch, skills=[_ACTIVE_SKILL])
     assert result.exit_code == 0
-    assert "Provenance" in result.output
+    assert "Has Upstream" in result.output
 
 
 def test_table_goes_to_stdout(monkeypatch):
@@ -136,29 +151,99 @@ def test_malformed_skill_shows_malformed_inline_status(monkeypatch):
     assert "malformed" in result.output
 
 
-def test_self_authored_skill_shows_self_authored_provenance(monkeypatch):
-    result = _run(monkeypatch, skills=[_ACTIVE_SKILL])
+def test_standalone_skill_shows_no_in_has_upstream(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_ACTIVE_SKILL],
+        deployed_fn=lambda t, s, lib: True,
+    )
 
     assert result.exit_code == 0
-    assert "self-authored" in result.output
+    assert "no" in result.output
 
 
-def test_imported_skill_shows_imported_provenance(monkeypatch):
-    result = _run(monkeypatch, skills=[_IMPORTED_SKILL])
-
-    assert result.exit_code == 0
-    assert "imported" in result.output
-
-
-def test_modified_imported_skill_shows_modified_flag_in_provenance(monkeypatch):
-    result = _run(monkeypatch, skills=[_MODIFIED_SKILL])
+def test_upstream_skill_shows_yes_in_has_upstream(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_IMPORTED_SKILL],
+        deployed_fn=lambda t, s, lib: True,
+    )
 
     assert result.exit_code == 0
-    assert "imported ⚠ modified" in result.output
+    assert "yes" in result.output
 
 
-def test_malformed_skill_shows_em_dash_for_provenance(monkeypatch):
-    result = _run(monkeypatch, skills=[_BAD_SKILL])
+def test_modified_column_reflects_modified_state_per_skill(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_MODIFIED_SKILL, _IMPORTED_SKILL, _ACTIVE_SKILL],
+        deployed_fn=lambda t, s, lib: True,
+    )
 
     assert result.exit_code == 0
-    assert "—" in result.output
+    assert "Modified" in result.output
+    # column order: Name, Status, Has Upstream, Modified, Deployed To
+    assert _cells(result.output, "mod")[3] == "yes"  # upstream, modified
+    assert _cells(result.output, "ext")[3] == "no"  # upstream, clean
+    assert _cells(result.output, "foo")[3] == "—"  # standalone: not applicable
+
+
+def test_upstream_urls_flag_swaps_has_upstream_for_url_column(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_IMPORTED_SKILL, _ACTIVE_SKILL],
+        deployed_fn=lambda t, s, lib: False,
+        args=["--upstream-urls"],
+    )
+
+    assert result.exit_code == 0
+    assert "Upstream URL" in result.output
+    assert "Has Upstream" not in result.output
+    # column order: Name, Status, Upstream URL, Modified, Deployed To
+    assert _cells(result.output, "ext")[2] == "https://example.com"
+    assert _cells(result.output, "foo")[2] == "—"  # standalone: no URL
+    # the Modified column is unaffected by the flag
+    assert _cells(result.output, "ext")[3] == "no"
+    assert _cells(result.output, "foo")[3] == "—"
+
+
+def test_upstream_urls_renders_full_url_without_truncation(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_LONG_URL_SKILL],
+        deployed_fn=lambda t, s, lib: False,
+        args=["--upstream-urls"],
+    )
+
+    assert result.exit_code == 0
+    # a truncated cell would show Rich's ellipsis; the URL must survive in full
+    assert "…" not in result.output
+
+
+def test_upstream_url_cell_renders_a_clickable_hyperlink():
+    # the CliRunner console is non-tty and strips hyperlinks, so render the cell
+    # through a forced-terminal console to observe the OSC 8 escape a terminal
+    # uses to make the URL clickable even when the cell folds across lines
+    url = "https://github.com/someorg/somerepo/tree/main/skills/some-very-long-skill"
+    console = Console(force_terminal=True, width=200)
+    with console.capture() as capture:
+        console.print(list_cmd._upstream_url_cell(url))
+    rendered = capture.get()
+
+    assert "\x1b]8;" in rendered  # OSC 8 hyperlink sequence
+    assert url in rendered  # link target is the full source URL
+
+
+def test_malformed_skill_shows_em_dash_in_upstream_and_modified(monkeypatch):
+    result = _run(monkeypatch, targets=[_CLAUDE_TARGET], skills=[_BAD_SKILL])
+
+    assert result.exit_code == 0
+    # column order: Name, Status, Has Upstream, Modified, Deployed To
+    cells = _cells(result.output, "bad")
+    assert cells[2] == "—"  # Has Upstream
+    assert cells[3] == "—"  # Modified

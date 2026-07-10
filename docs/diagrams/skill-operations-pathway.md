@@ -51,6 +51,6 @@ flowchart TD
 | `cleanup` | **no** — `--bulk`/`--all` only | `state == deprecated` | none — all eligible skills stay selectable | yes, always |
 | `delete` | yes | all skills (deliberately unrestricted — `--all` is a "wipe the library" escape hatch) | none | yes, always |
 | `mark` | yes | all skills | none | no |
-| `refresh` | yes | imported (non-self-authored) skills | "self-authored — nothing to refresh"; "modified — needs review before refresh" | yes, always |
+| `refresh` | yes | skills that have an upstream | "no upstream — nothing to refresh"; "modified — needs review before refresh" | yes, always |
 
 `deploy` and `undeploy` also resolve a Deployment Target (which deployment directory) before resolving the Skill Selection, via their own existing checkbox — unchanged by this PRD. `mark` additionally prompts for `--key`/`--value` independently after skill resolution, once each is missing.

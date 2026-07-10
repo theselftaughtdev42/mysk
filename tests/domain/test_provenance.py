@@ -4,14 +4,14 @@ import pytest
 from mysk.domain import Provenance
 
 
-def test_default_provenance_is_self_authored():
-    assert Provenance().is_imported is False
+def test_default_provenance_has_no_upstream():
+    assert Provenance().has_upstream is False
 
 
-def test_skill_with_source_is_imported():
+def test_provenance_with_source_has_upstream():
     prov = Provenance(source="https://github.com/owner/repo", modified=True)
 
-    assert prov.is_imported is True
+    assert prov.has_upstream is True
     assert prov.source == "https://github.com/owner/repo"
     assert prov.modified is True
 
