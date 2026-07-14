@@ -39,7 +39,7 @@ $ mysk import [OPTIONS] URL COMMAND [ARGS]...
 
 **Arguments**:
 
-* `URL`: GitHub URL or local path of the skill directory.  [required]
+* `URL`: GitHub URL, owner/repo shorthand, or local path of the skill directory.  [required]
 
 **Options**:
 
@@ -133,7 +133,7 @@ $ mysk list [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
-* `--upstream-urls`: Show each skill&#x27;s upstream source URL instead of a yes/no column.
+* `--show-upstream`: Show each skill&#x27;s upstream source URL instead of a yes/no column.
 * `--help`: Show this message and exit.
 
 ## `mysk mark`

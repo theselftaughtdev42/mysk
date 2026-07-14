@@ -76,6 +76,10 @@ _Avoid_: origin, attribution, self-authored, imported (as a provenance value)
 The upstream URL recorded inside a skill's `mysk` frontmatter block. Its presence is what makes a skill refreshable (has an upstream); it identifies where the skill came from, keys duplicate-import detection, and enables Refresh.
 _Avoid_: url, link, reference
 
+**Repo Slug**:
+The compact `owner/repo` identifier of a GitHub repository, e.g. `theselftaughtdev42/mysk`. Accepted as `import` input and shown in `list` as the compact rendering of a skill's Source, hyperlinked to the full URL. Identifies a *repository*. GitHub is assumed — see ADR-0010.
+_Avoid_: slug (bare), handle, shorthand, owner/repo string
+
 **Modified**:
 A boolean flag inside the `mysk` frontmatter block, meaningful only on skills that have an upstream `source`. `false` means the local content is a clean copy of upstream and can be safely overwritten on Refresh. `true` means the content has been changed locally and requires human review before any upstream Refresh. Structurally inapplicable to standalone skills, which have no upstream to diverge from. Covers content changes only — renames are tracked by `upstream_name`.
 _Avoid_: changed, customised, forked

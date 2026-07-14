@@ -9,6 +9,21 @@ _REPO_URL_PARTS = 2
 _SKILL_URL_PARTS = 5
 
 
+def repo_slug(source: str) -> str | None:
+    """Compact a stored GitHub source URL to its `owner/repo` Repo Slug.
+
+    Returns None when *source* is not a github.com URL with at least an owner
+    and repo, so callers can fall back to showing the stored string.
+    """
+    parsed = urlparse(source)
+    if parsed.hostname != "github.com":
+        return None
+    parts = parsed.path.strip("/").split("/")
+    if len(parts) < _REPO_URL_PARTS or not (parts[0] and parts[1]):
+        return None
+    return f"{parts[0]}/{parts[1]}"
+
+
 class RepoRootUrl(BaseModel):
     """A parsed GitHub repo root URL (owner + repo only, no path)."""
 
@@ -19,9 +34,15 @@ class RepoRootUrl(BaseModel):
 
     @classmethod
     def parse(cls, raw: str) -> Self:
-        """Parse a `https://github.com/{owner}/{repo}` URL."""
-        # only github.com is supported for now
+        """Parse a full `https://github.com/{owner}/{repo}` URL or a Repo Slug.
+
+        A Repo Slug is the compact `owner/repo` form (GitHub assumed, no scheme);
+        it expands to the same repo root as the equivalent full URL.
+        """
         parsed = urlparse(raw)
+        if not parsed.scheme:
+            return cls._parse_repo_slug(raw)
+        # a full URL: only github.com is supported for now
         if parsed.hostname != "github.com":
             msg = (
                 f"Only github.com URLs are supported in this version, "
@@ -34,6 +55,19 @@ class RepoRootUrl(BaseModel):
             msg = (
                 f"Expected a GitHub repo URL of the form "
                 f"https://github.com/{{owner}}/{{repo}}, got: {raw!r}"
+            )
+            raise ValueError(msg)
+        owner, repo = parts
+        return cls(owner=owner, repo=repo)
+
+    @classmethod
+    def _parse_repo_slug(cls, raw: str) -> Self:
+        # a Repo Slug is exactly two non-empty segments: owner/repo
+        parts = raw.strip("/").split("/")
+        if len(parts) != _REPO_URL_PARTS or not all(parts):
+            msg = (
+                f"Expected a repo shorthand of the form {{owner}}/{{repo}}, "
+                f"got: {raw!r}"
             )
             raise ValueError(msg)
         owner, repo = parts

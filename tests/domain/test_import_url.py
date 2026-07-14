@@ -34,6 +34,24 @@ def test_repo_root_url_parse_valid():
     assert url.repo == "cool-skills"
 
 
+def test_repo_root_url_parses_repo_slug():
+    url = RepoRootUrl.parse("alice/cool-skills")
+
+    assert url.owner == "alice"
+    assert url.repo == "cool-skills"
+
+
+def test_repo_root_url_rejects_slug_with_extra_segments():
+    with pytest.raises(ValueError, match="Expected a repo shorthand of the form"):
+        RepoRootUrl.parse("alice/cool-skills/skills/foo")
+
+
+@pytest.mark.parametrize("slug", ["alice/", "/cool-skills"])
+def test_repo_root_url_rejects_slug_with_empty_segments(slug):
+    with pytest.raises(ValueError, match="Expected a repo shorthand of the form"):
+        RepoRootUrl.parse(slug)
+
+
 def test_repo_root_url_rejects_non_github_host():
     with pytest.raises(ValueError, match=r"Only github\.com URLs are supported"):
         RepoRootUrl.parse("https://gitlab.com/alice/cool-skills")
