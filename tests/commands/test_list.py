@@ -19,6 +19,7 @@ _LONG_URL_SKILL = make_skill(
     source="https://github.com/someorg/somerepo/tree/main/skills/some-very-long-skill",
 )
 _MODIFIED_SKILL = make_skill("mod", source="https://example.com", modified=True)
+_GITHUB_NO_REPO_SKILL = make_skill("solo", source="https://github.com/solo")
 _NO_MYSK_BLOCK_SKILL = SkillLoadError(
     path=Path("/fake/skills/legacy/SKILL.md"),
     schema_error="missing mysk block",
@@ -191,13 +192,13 @@ def test_modified_column_reflects_modified_state_per_skill(monkeypatch):
     assert _cells(result.output, "foo")[3] == "—"  # standalone: not applicable
 
 
-def test_upstream_urls_flag_swaps_has_upstream_for_url_column(monkeypatch):
+def test_show_upstream_flag_swaps_has_upstream_for_url_column(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_IMPORTED_SKILL, _ACTIVE_SKILL],
         deployed_fn=lambda t, s, lib: False,
-        args=["--upstream-urls"],
+        args=["--show-upstream"],
     )
 
     assert result.exit_code == 0
@@ -211,13 +212,29 @@ def test_upstream_urls_flag_swaps_has_upstream_for_url_column(monkeypatch):
     assert _cells(result.output, "foo")[3] == "—"
 
 
-def test_upstream_urls_renders_full_url_without_truncation(monkeypatch):
+def test_show_upstream_renders_repo_slug_for_github_source(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_LONG_URL_SKILL, _ACTIVE_SKILL],
+        deployed_fn=lambda t, s, lib: False,
+        args=["--show-upstream"],
+    )
+
+    assert result.exit_code == 0
+    # column order: Name, Status, Upstream URL, Modified, Deployed To
+    # the full github source is compacted to its owner/repo Repo Slug
+    assert _cells(result.output, "longurl")[2] == "someorg/somerepo"
+    assert _cells(result.output, "foo")[2] == "—"  # standalone: still no URL
+
+
+def test_show_upstream_renders_full_url_without_truncation(monkeypatch):
     result = _run(
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_LONG_URL_SKILL],
         deployed_fn=lambda t, s, lib: False,
-        args=["--upstream-urls"],
+        args=["--show-upstream"],
     )
 
     assert result.exit_code == 0
@@ -237,6 +254,21 @@ def test_upstream_url_cell_renders_a_clickable_hyperlink():
 
     assert "\x1b]8;" in rendered  # OSC 8 hyperlink sequence
     assert url in rendered  # link target is the full source URL
+
+
+def test_show_upstream_falls_back_to_full_url_when_source_has_no_repo(monkeypatch):
+    result = _run(
+        monkeypatch,
+        targets=[_CLAUDE_TARGET],
+        skills=[_GITHUB_NO_REPO_SKILL],
+        deployed_fn=lambda t, s, lib: False,
+        args=["--show-upstream"],
+    )
+
+    assert result.exit_code == 0
+    # a github URL with no repo segment can't compact to owner/repo, so the
+    # cell degrades gracefully to the full stored URL rather than crashing
+    assert _cells(result.output, "solo")[2] == "https://github.com/solo"
 
 
 def test_malformed_skill_shows_em_dash_in_upstream_and_modified(monkeypatch):

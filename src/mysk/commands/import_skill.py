@@ -41,7 +41,13 @@ _LIFECYCLE_CHOICES = [
 @app.callback()
 def import_skill(
     url: Annotated[
-        str, typer.Argument(help="GitHub URL or local path of the skill directory.")
+        str,
+        typer.Argument(
+            help=(
+                "GitHub URL, owner/repo shorthand, or local path "
+                "of the skill directory."
+            ),
+        ),
     ],
     rename: Annotated[
         str | None,

@@ -9,6 +9,7 @@ from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
+from mysk.domain.import_url import repo_slug
 from mysk.domain.lifecycle import LifecycleState
 from mysk.io.skills import load_skills, skill_library
 from mysk.io.targets import discover_targets, is_deployed
@@ -26,21 +27,23 @@ _HIGHLIGHTED = {LifecycleState.ACTIVE, LifecycleState.EXPERIMENTAL}
 def _upstream_url_cell(source: str | None) -> RenderableType:
     """Render the Upstream URL cell: a clickable link to *source*, or — if standalone.
 
-    The URL is wrapped in an OSC 8 hyperlink so terminals can open it on click
-    even though the cell folds the visible text across lines.
+    The visible text is compacted to the source's `owner/repo` Repo Slug (falling
+    back to the full URL when it does not parse), while the OSC 8 link target stays
+    the full stored URL so a click still reaches the exact source.
     """
     if source is None:
         return "—"
-    return Text(source, style=Style(link=source))
+    display = repo_slug(source) or source
+    return Text(display, style=Style(link=source))
 
 
 @app.callback()
 def list_skills(
     *,
-    upstream_urls: Annotated[
+    show_upstream: Annotated[
         bool,
         typer.Option(
-            "--upstream-urls",
+            "--show-upstream",
             help="Show each skill's upstream source URL instead of a yes/no column.",
         ),
     ] = False,
@@ -56,7 +59,7 @@ def list_skills(
     table.add_column("Status")
     # the upstream column is either a yes/no fact or the full source URL; the URL
     # is folded (wrapped) rather than truncated so it is always shown in full
-    if upstream_urls:
+    if show_upstream:
         table.add_column("Upstream URL", overflow="fold")
     else:
         table.add_column("Has Upstream")
@@ -67,7 +70,7 @@ def list_skills(
     for r in installed:
         state = r.mysk.state
         prov = r.mysk.provenance
-        if upstream_urls:
+        if show_upstream:
             upstream_cell: RenderableType = _upstream_url_cell(prov.source)
         else:
             upstream_cell = "yes" if prov.has_upstream else "no"
