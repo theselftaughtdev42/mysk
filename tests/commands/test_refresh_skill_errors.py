@@ -4,6 +4,7 @@ import tarfile
 import httpx
 import respx
 
+from mysk.commands.refresh_skill import EXIT_UPSTREAM_UNREACHABLE
 from tests.commands._refresh_skill_support import (
     _TARBALL_URL,
     _installed_skill_md,
@@ -75,7 +76,20 @@ def test_refresh_unparseable_source_url_exits_with_error(library, run_refresh):
 
 
 @respx.mock
-def test_refresh_download_error_exits_with_error(library, run_refresh):
+def test_refresh_single_gone_upstream_exits_1(library, run_refresh):
+    skill_dir = library / "my-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(_installed_skill_md())
+    respx.get(_TARBALL_URL).mock(return_value=httpx.Response(404))
+
+    result = run_refresh(extra_args=["my-skill"])
+
+    assert result.exit_code == 1
+    assert "no longer exists" in result.output.lower()
+
+
+@respx.mock
+def test_refresh_single_transient_failure_exits_2(library, run_refresh):
     skill_dir = library / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_installed_skill_md())
@@ -83,7 +97,8 @@ def test_refresh_download_error_exits_with_error(library, run_refresh):
 
     result = run_refresh(extra_args=["my-skill"])
 
-    assert result.exit_code != 0
+    assert result.exit_code == EXIT_UPSTREAM_UNREACHABLE
+    assert "try again later" in result.output.lower()
 
 
 @respx.mock
@@ -104,8 +119,8 @@ def test_refresh_missing_upstream_skill_md_exits_with_error(library, run_refresh
 
     result = run_refresh(extra_args=["my-skill"])
 
-    assert result.exit_code != 0
-    assert "SKILL.md" in result.output
+    assert result.exit_code == 1
+    assert "no longer exists" in result.output.lower()
 
 
 @respx.mock

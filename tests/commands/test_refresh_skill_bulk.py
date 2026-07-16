@@ -147,6 +147,114 @@ def test_refresh_bulk_standalone_skill_name_errors(library, run_refresh):
     assert "self" in result.output
 
 
+@respx.mock
+def test_refresh_all_one_broken_upstream_does_not_abort_healthy_skills(
+    library, run_refresh
+):
+    _src_alpha = "https://github.com/alice/cool-skills/tree/main/skills/alpha"
+    _src_zombie = "https://github.com/alice/cool-skills/tree/main/skills/zombie"
+
+    (library / "alpha").mkdir()
+    (library / "alpha" / "SKILL.md").write_text(
+        _installed_skill_md(name="alpha", source=_src_alpha)
+    )
+    (library / "zombie").mkdir()
+    (library / "zombie" / "SKILL.md").write_text(
+        _installed_skill_md(name="zombie", source=_src_zombie)
+    )
+
+    upstream_alpha = "---\nname: alpha\ndescription: improved alpha\n---\n# alpha\n"
+    # sorted order: alpha (healthy), then zombie (upstream 404 → gone)
+    respx.get(_TARBALL_URL).mock(
+        side_effect=[
+            httpx.Response(200, content=_make_tarball("skills/alpha", upstream_alpha)),
+            httpx.Response(404),
+        ]
+    )
+
+    result = run_refresh(extra_args=["--all"])
+
+    assert result.exit_code == 0, result.output
+    assert "improved alpha" in (library / "alpha" / "SKILL.md").read_text()
+    assert "broken upstream" in result.output.lower()
+    assert "zombie" in result.output
+
+
+@respx.mock
+def test_refresh_all_groups_broken_and_unreachable_distinctly(library, run_refresh):
+    _src_a = "https://github.com/alice/cool-skills/tree/main/skills/aa-healthy"
+    _src_b = "https://github.com/alice/cool-skills/tree/main/skills/bb-gone"
+    _src_c = "https://github.com/alice/cool-skills/tree/main/skills/cc-slow"
+
+    (library / "aa-healthy").mkdir()
+    (library / "aa-healthy" / "SKILL.md").write_text(
+        _installed_skill_md(name="aa-healthy", source=_src_a)
+    )
+    (library / "bb-gone").mkdir()
+    (library / "bb-gone" / "SKILL.md").write_text(
+        _installed_skill_md(name="bb-gone", source=_src_b)
+    )
+    (library / "cc-slow").mkdir()
+    (library / "cc-slow" / "SKILL.md").write_text(
+        _installed_skill_md(name="cc-slow", source=_src_c)
+    )
+
+    upstream_a = "---\nname: aa-healthy\ndescription: improved\n---\n# aa-healthy\n"
+    # sorted order: aa-healthy (ok), bb-gone (404 → gone), cc-slow (500 → unreachable)
+    respx.get(_TARBALL_URL).mock(
+        side_effect=[
+            httpx.Response(200, content=_make_tarball("skills/aa-healthy", upstream_a)),
+            httpx.Response(404),
+            httpx.Response(500),
+        ]
+    )
+
+    result = run_refresh(extra_args=["--all"])
+
+    assert result.exit_code == 0, result.output
+    assert "broken upstream" in result.output.lower()
+    assert "unreachable" in result.output.lower()
+    assert "bb-gone" in result.output
+    assert "cc-slow" in result.output
+
+
+@respx.mock
+def test_refresh_all_malformed_upstream_does_not_abort_healthy_skills(
+    library, run_refresh
+):
+    _src_bad = "https://github.com/alice/cool-skills/tree/main/skills/aa-bad"
+    _src_good = "https://github.com/alice/cool-skills/tree/main/skills/zz-good"
+
+    (library / "aa-bad").mkdir()
+    (library / "aa-bad" / "SKILL.md").write_text(
+        _installed_skill_md(name="aa-bad", source=_src_bad)
+    )
+    (library / "zz-good").mkdir()
+    (library / "zz-good" / "SKILL.md").write_text(
+        _installed_skill_md(name="zz-good", source=_src_good)
+    )
+
+    # a malformed upstream SKILL.md (mysk block missing state) fails to parse
+    bad_upstream = (
+        "---\nname: aa-bad\ndescription: d\nmysk:\n  source: x\n---\n# aa-bad\n"
+    )
+    good_upstream = "---\nname: zz-good\ndescription: improved\n---\n# zz-good\n"
+    # sorted order: aa-bad (malformed → per-skill failure), then zz-good (healthy)
+    respx.get(_TARBALL_URL).mock(
+        side_effect=[
+            httpx.Response(200, content=_make_tarball("skills/aa-bad", bad_upstream)),
+            httpx.Response(200, content=_make_tarball("skills/zz-good", good_upstream)),
+        ]
+    )
+
+    result = run_refresh(extra_args=["--all"])
+
+    assert result.exit_code == 0, result.output
+    assert "malformed" in result.output.lower()
+    assert "aa-bad" in result.output
+    assert "improved" in (library / "zz-good" / "SKILL.md").read_text()
+
+
 def test_refresh_name_and_bulk_together_exit_with_mutual_exclusivity_error(
     library, run_refresh
 ):

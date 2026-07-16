@@ -2,6 +2,7 @@
 
 import shutil
 import tempfile
+from enum import Enum, auto
 from pathlib import Path
 from typing import Annotated, cast
 
@@ -11,7 +12,11 @@ import typer
 from mysk.domain.import_url import ImportUrl
 from mysk.domain.skill import Skill
 from mysk.io import frontmatter
-from mysk.io.github import DownloadError, download_skill
+from mysk.io.github import (
+    UpstreamGoneError,
+    UpstreamUnreachableError,
+    download_skill,
+)
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
 from mysk.output import Output
 from mysk.skill_operation_pathway import (
@@ -22,6 +27,30 @@ from mysk.skill_operation_pathway import (
 )
 
 out = Output(__name__)
+
+# Exit codes for a single named refresh, so scripts and CI can react: a
+# permanently broken upstream is the conventional "named thing failed" 1, while
+# a transient failure is 2 to signal "retryable — come back later" (issue #146).
+EXIT_UPSTREAM_GONE = 1
+EXIT_UPSTREAM_UNREACHABLE = 2
+
+
+class RefreshOutcome(Enum):
+    """The result of attempting to refresh a single skill.
+
+    `_refresh_one` returns one of these rather than deciding messaging or exit
+    codes itself; the caller (single-skill or batch) routes the outcome. A
+    broken or unreachable upstream is reported, never raised, so a batch run
+    keeps going.
+    """
+
+    REFRESHED = auto()
+    NO_CHANGE = auto()
+    ABORTED = auto()
+    FAILED = auto()
+    GONE = auto()
+    UNREACHABLE = auto()
+
 
 app = typer.Typer(
     invoke_without_command=True, context_settings={"allow_interspersed_args": True}
@@ -72,9 +101,9 @@ def refresh_skill(
             raise typer.Exit(1) from None
         selected = None
 
-    # single named skill: refresh it directly, surfacing any error
+    # single named skill: refresh it directly, mapping failures to exit codes
     if name is not None:
-        _refresh_one(name, library, yes=yes)
+        _route_single_outcome(name, _refresh_one(name, library, yes=yes))
         return
 
     # fall back to an interactive Skill Selection when no flag picked one
@@ -95,9 +124,15 @@ def refresh_skill(
         out.note("No imported skills found in the Skill Library.")
         return
 
-    # refresh each unmodified skill
+    # refresh each unmodified skill, never aborting on a broken upstream
+    gone: list[str] = []
+    unreachable: list[str] = []
     for result in refreshable:
-        _refresh_one(result.dir.name, library, yes=yes)
+        outcome = _refresh_one(result.dir.name, library, yes=yes)
+        if outcome is RefreshOutcome.GONE:
+            gone.append(result.dir.name)
+        elif outcome is RefreshOutcome.UNREACHABLE:
+            unreachable.append(result.dir.name)
 
     # list the modified skills skipped as needing review
     if needs_review:
@@ -107,8 +142,45 @@ def refresh_skill(
         for result in needs_review:
             out.product(f"  {result.dir.name}", raw=True)
 
+    # group the broken and merely-unreachable upstreams collected above
+    _report_broken_upstreams(gone, unreachable)
 
-def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
+
+def _route_single_outcome(name: str, outcome: RefreshOutcome) -> None:
+    # a single named refresh maps a broken/unreachable upstream to an exit code
+    if outcome is RefreshOutcome.GONE:
+        out.error(
+            f"{name!r}: upstream no longer exists — it can no longer be refreshed."
+        )
+        raise typer.Exit(EXIT_UPSTREAM_GONE)
+    if outcome is RefreshOutcome.UNREACHABLE:
+        out.error(f"{name!r}: upstream unreachable — try again later.")
+        raise typer.Exit(EXIT_UPSTREAM_UNREACHABLE)
+    if outcome is RefreshOutcome.FAILED:
+        # the specific error was already reported by `_refresh_one`
+        raise typer.Exit(1)
+
+
+def _report_broken_upstreams(gone: list[str], unreachable: list[str]) -> None:
+    # end-of-batch summary mirroring the needs-review block: broken upstreams
+    # are skipped for good, unreachable ones are worth retrying later
+    if gone:
+        out.product(
+            "\n[bold red]Broken upstream[/bold red] "
+            "(upstream no longer exists — skipped):"
+        )
+        for skill_name in gone:
+            out.product(f"  {skill_name}", raw=True)
+    if unreachable:
+        out.product(
+            "\n[bold yellow]Unreachable[/bold yellow] "
+            "(temporary failure — try again later):"
+        )
+        for skill_name in unreachable:
+            out.product(f"  {skill_name}", raw=True)
+
+
+def _refresh_one(name: str, library: Path, *, yes: bool) -> RefreshOutcome:
     skill_md_path = library / name / "SKILL.md"
 
     if not skill_md_path.exists():
@@ -120,8 +192,8 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     try:
         skill = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        out.error(f"Malformed SKILL.md: {exc}")
-        raise typer.Exit(1) from None
+        out.error(f"{name!r}: malformed SKILL.md: {exc}")
+        return RefreshOutcome.FAILED
 
     # refuse to refresh skills with no upstream or with local modifications
     if skill.mysk is None or not skill.mysk.provenance.has_upstream:
@@ -143,33 +215,44 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
     try:
         import_url = ImportUrl.parse(source)
     except ValueError as exc:
-        out.error(f"Cannot parse source URL {source!r}: {exc}")
-        raise typer.Exit(1) from None
+        out.error(f"{name!r}: cannot parse source URL {source!r}: {exc}")
+        return RefreshOutcome.FAILED
 
     local_dir = library / name
-
-    # download the upstream skill into a temp staging dir
     out.info(f"refreshing {name!r} from {source}")
+    return _download_and_apply(name, import_url, skill, local_dir, yes=yes)
+
+
+def _download_and_apply(
+    name: str,
+    import_url: ImportUrl,
+    skill: Skill,
+    local_dir: Path,
+    *,
+    yes: bool,
+) -> RefreshOutcome:
+    # download the upstream skill into a temp staging dir, then replace the local
+    # content once we know it parses and actually differs
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / name
         try:
             download_skill(import_url, tmp_skill_dir)
-        except DownloadError as exc:
-            out.error(str(exc))
-            raise typer.Exit(1) from None
+        except UpstreamGoneError as exc:
+            out.debug(f"broken upstream for {name!r}: {exc}")
+            return RefreshOutcome.GONE
+        except UpstreamUnreachableError as exc:
+            out.debug(f"unreachable upstream for {name!r}: {exc}")
+            return RefreshOutcome.UNREACHABLE
 
         upstream_skill_md = tmp_skill_dir / "SKILL.md"
-        if not upstream_skill_md.exists():
-            out.error("Downloaded skill has no SKILL.md.")
-            raise typer.Exit(1)
 
         # parse the freshly downloaded upstream skill
         upstream_data, upstream_body = frontmatter.read(upstream_skill_md.read_text())
         try:
             upstream_skill = Skill.from_frontmatter(upstream_data)
         except (ValueError, KeyError) as exc:
-            out.error(f"Malformed upstream SKILL.md: {exc}")
-            raise typer.Exit(1) from None
+            out.error(f"{name!r}: malformed upstream SKILL.md: {exc}")
+            return RefreshOutcome.FAILED
 
         # keep the local mysk block, take content from upstream
         refreshed = Skill(
@@ -185,18 +268,19 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> None:
         # skip when nothing changed, otherwise confirm and replace local content
         if _dirs_are_identical(local_dir, tmp_skill_dir):
             out.note(f"No changes — {name!r} is already up to date.")
-            return
+            return RefreshOutcome.NO_CHANGE
 
         if not confirm(
             f"Refresh {name!r}? This will overwrite its local content.", yes=yes
         ):
             out.note(f"Aborted refresh of {name!r}.")
-            return
+            return RefreshOutcome.ABORTED
 
         shutil.rmtree(local_dir)
         shutil.copytree(tmp_skill_dir, local_dir)
 
     out.success(f"Refreshed {name!r}.")
+    return RefreshOutcome.REFRESHED
 
 
 def _dirs_are_identical(a: Path, b: Path) -> bool:
