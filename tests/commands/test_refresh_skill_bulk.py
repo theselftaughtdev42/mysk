@@ -218,6 +218,43 @@ def test_refresh_all_groups_broken_and_unreachable_distinctly(library, run_refre
     assert "cc-slow" in result.output
 
 
+@respx.mock
+def test_refresh_all_malformed_upstream_does_not_abort_healthy_skills(
+    library, run_refresh
+):
+    _src_bad = "https://github.com/alice/cool-skills/tree/main/skills/aa-bad"
+    _src_good = "https://github.com/alice/cool-skills/tree/main/skills/zz-good"
+
+    (library / "aa-bad").mkdir()
+    (library / "aa-bad" / "SKILL.md").write_text(
+        _installed_skill_md(name="aa-bad", source=_src_bad)
+    )
+    (library / "zz-good").mkdir()
+    (library / "zz-good" / "SKILL.md").write_text(
+        _installed_skill_md(name="zz-good", source=_src_good)
+    )
+
+    # a malformed upstream SKILL.md (mysk block missing state) fails to parse
+    bad_upstream = (
+        "---\nname: aa-bad\ndescription: d\nmysk:\n  source: x\n---\n# aa-bad\n"
+    )
+    good_upstream = "---\nname: zz-good\ndescription: improved\n---\n# zz-good\n"
+    # sorted order: aa-bad (malformed → per-skill failure), then zz-good (healthy)
+    respx.get(_TARBALL_URL).mock(
+        side_effect=[
+            httpx.Response(200, content=_make_tarball("skills/aa-bad", bad_upstream)),
+            httpx.Response(200, content=_make_tarball("skills/zz-good", good_upstream)),
+        ]
+    )
+
+    result = run_refresh(extra_args=["--all"])
+
+    assert result.exit_code == 0, result.output
+    assert "malformed" in result.output.lower()
+    assert "aa-bad" in result.output
+    assert "improved" in (library / "zz-good" / "SKILL.md").read_text()
+
+
 def test_refresh_name_and_bulk_together_exit_with_mutual_exclusivity_error(
     library, run_refresh
 ):

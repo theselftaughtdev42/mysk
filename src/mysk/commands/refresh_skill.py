@@ -47,6 +47,7 @@ class RefreshOutcome(Enum):
     REFRESHED = auto()
     NO_CHANGE = auto()
     ABORTED = auto()
+    FAILED = auto()
     GONE = auto()
     UNREACHABLE = auto()
 
@@ -155,6 +156,9 @@ def _route_single_outcome(name: str, outcome: RefreshOutcome) -> None:
     if outcome is RefreshOutcome.UNREACHABLE:
         out.error(f"{name!r}: upstream unreachable — try again later.")
         raise typer.Exit(EXIT_UPSTREAM_UNREACHABLE)
+    if outcome is RefreshOutcome.FAILED:
+        # the specific error was already reported by `_refresh_one`
+        raise typer.Exit(1)
 
 
 def _report_broken_upstreams(gone: list[str], unreachable: list[str]) -> None:
@@ -188,8 +192,8 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> RefreshOutcome:
     try:
         skill = Skill.from_frontmatter(data)
     except (ValueError, KeyError) as exc:
-        out.error(f"Malformed SKILL.md: {exc}")
-        raise typer.Exit(1) from None
+        out.error(f"{name!r}: malformed SKILL.md: {exc}")
+        return RefreshOutcome.FAILED
 
     # refuse to refresh skills with no upstream or with local modifications
     if skill.mysk is None or not skill.mysk.provenance.has_upstream:
@@ -211,13 +215,24 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> RefreshOutcome:
     try:
         import_url = ImportUrl.parse(source)
     except ValueError as exc:
-        out.error(f"Cannot parse source URL {source!r}: {exc}")
-        raise typer.Exit(1) from None
+        out.error(f"{name!r}: cannot parse source URL {source!r}: {exc}")
+        return RefreshOutcome.FAILED
 
     local_dir = library / name
-
-    # download the upstream skill into a temp staging dir
     out.info(f"refreshing {name!r} from {source}")
+    return _download_and_apply(name, import_url, skill, local_dir, yes=yes)
+
+
+def _download_and_apply(
+    name: str,
+    import_url: ImportUrl,
+    skill: Skill,
+    local_dir: Path,
+    *,
+    yes: bool,
+) -> RefreshOutcome:
+    # download the upstream skill into a temp staging dir, then replace the local
+    # content once we know it parses and actually differs
     with tempfile.TemporaryDirectory() as tmp:
         tmp_skill_dir = Path(tmp) / name
         try:
@@ -236,8 +251,8 @@ def _refresh_one(name: str, library: Path, *, yes: bool) -> RefreshOutcome:
         try:
             upstream_skill = Skill.from_frontmatter(upstream_data)
         except (ValueError, KeyError) as exc:
-            out.error(f"Malformed upstream SKILL.md: {exc}")
-            raise typer.Exit(1) from None
+            out.error(f"{name!r}: malformed upstream SKILL.md: {exc}")
+            return RefreshOutcome.FAILED
 
         # keep the local mysk block, take content from upstream
         refreshed = Skill(
