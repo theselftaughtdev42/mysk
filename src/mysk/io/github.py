@@ -18,18 +18,44 @@ class DownloadError(Exception):
     """Raised when a GitHub download or API request fails."""
 
 
+class UpstreamGoneError(DownloadError):
+    """A recorded upstream that permanently no longer resolves.
+
+    The repo or ref is gone, or the skill directory (or its `SKILL.md`) has
+    been renamed or deleted within a live repo.
+    """
+
+
+class UpstreamUnreachableError(DownloadError):
+    """A transient failure fetching an upstream.
+
+    A 5xx, 429, or 403 response, or a dropped connection — the upstream may
+    still exist and the fetch is worth retrying later.
+    """
+
+
 def download_skill(url: ImportUrl, dest: Path) -> None:
     """Download the skill at *url* into *dest*, atomically.
 
-    On any failure *dest* is left untouched. Raises DownloadError on HTTP
-    errors or network failures.
+    On any failure *dest* is left untouched. Raises UpstreamGoneError when the
+    upstream permanently no longer resolves (404, or a missing skill directory
+    or SKILL.md) and UpstreamUnreachableError on a transient failure (5xx, 429,
+    403, or a dropped connection).
     """
     out.debug(f"GET {url.tarball_url()}")
-    response = httpx.get(url.tarball_url(), follow_redirects=True)
+    try:
+        response = httpx.get(url.tarball_url(), follow_redirects=True)
+    except httpx.HTTPError as exc:
+        msg = f"Could not reach {url.tarball_url()!r}: {exc}"
+        raise UpstreamUnreachableError(msg) from exc
     out.debug(f"→ HTTP {response.status_code} ({len(response.content)} bytes)")
     if response.is_error:
-        msg = f"Failed to download {url.tarball_url()!r}: HTTP {response.status_code}"
-        raise DownloadError(msg)
+        target = url.tarball_url()
+        if response.status_code == httpx.codes.NOT_FOUND:
+            msg = f"Upstream {target!r} no longer exists (HTTP 404)."
+            raise UpstreamGoneError(msg)
+        msg = f"Could not reach {target!r}: HTTP {response.status_code}."
+        raise UpstreamUnreachableError(msg)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -37,6 +63,12 @@ def download_skill(url: ImportUrl, dest: Path) -> None:
             tar.extractall(tmp_path, filter="data")
 
         skill_dir = _find_skill_dir(tmp_path, url.path)
+        if not (skill_dir / "SKILL.md").exists():
+            msg = (
+                f"Upstream skill directory {url.path!r} has no SKILL.md — "
+                "it appears to have been renamed or deleted."
+            )
+            raise UpstreamGoneError(msg)
         out.debug(f"copytree {skill_dir} → {dest}")
         shutil.copytree(skill_dir, dest)
 
@@ -77,4 +109,4 @@ def _find_skill_dir(extracted: Path, skill_path: str) -> Path:
         if candidate.is_dir():
             return candidate
     msg = f"Could not find skill directory {skill_path!r} in the downloaded archive."
-    raise DownloadError(msg)
+    raise UpstreamGoneError(msg)

@@ -419,9 +419,6 @@ def _import_single(import_url: ImportUrl, url: str, rename: str | None) -> None:
             raise typer.Exit(1) from None
 
         skill_md_path = tmp_skill_dir / "SKILL.md"
-        if not skill_md_path.exists():
-            out.error("Downloaded skill has no SKILL.md.")
-            raise typer.Exit(1)
 
         # parse the downloaded skill's frontmatter
         data, body = frontmatter.read(skill_md_path.read_text())

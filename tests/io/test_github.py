@@ -7,16 +7,43 @@ import pytest
 import respx
 
 from mysk.domain.import_url import ImportUrl, RepoRootUrl
-from mysk.io.github import DownloadError, download_skill, scan_repo_for_skills
+from mysk.io.github import (
+    DownloadError,
+    UpstreamGoneError,
+    UpstreamUnreachableError,
+    download_skill,
+    scan_repo_for_skills,
+)
 
 _URL = ImportUrl.parse("https://github.com/alice/cool-skills/tree/main/skills/my-skill")
 
 
 @respx.mock
-def test_download_failure_raises_and_writes_no_files(tmp_path):
+def test_download_404_raises_upstream_gone_and_writes_no_files(tmp_path):
     respx.get(_URL.tarball_url()).mock(return_value=httpx.Response(404))
 
-    with pytest.raises(DownloadError, match="404"):
+    with pytest.raises(UpstreamGoneError):
+        download_skill(_URL, tmp_path / "my-skill")
+
+    assert not (tmp_path / "my-skill").exists()
+
+
+@respx.mock
+@pytest.mark.parametrize("status", [500, 502, 429, 403])
+def test_download_transient_status_raises_upstream_unreachable(tmp_path, status):
+    respx.get(_URL.tarball_url()).mock(return_value=httpx.Response(status))
+
+    with pytest.raises(UpstreamUnreachableError):
+        download_skill(_URL, tmp_path / "my-skill")
+
+    assert not (tmp_path / "my-skill").exists()
+
+
+@respx.mock
+def test_download_dropped_connection_raises_upstream_unreachable(tmp_path):
+    respx.get(_URL.tarball_url()).mock(side_effect=httpx.ConnectError("boom"))
+
+    with pytest.raises(UpstreamUnreachableError):
         download_skill(_URL, tmp_path / "my-skill")
 
     assert not (tmp_path / "my-skill").exists()
@@ -105,8 +132,27 @@ def test_download_skill_raises_when_skill_path_not_found_in_archive(tmp_path):
         return_value=httpx.Response(200, content=buf.getvalue())
     )
 
-    with pytest.raises(DownloadError, match="Could not find"):
+    with pytest.raises(UpstreamGoneError, match="Could not find"):
         download_skill(_URL, tmp_path / "my-skill")
+
+
+@respx.mock
+def test_download_skill_raises_upstream_gone_when_archive_has_no_skill_md(tmp_path):
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        data = b"content"
+        info = tarfile.TarInfo(name="repo-abc/skills/my-skill/other.txt")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+    respx.get(_URL.tarball_url()).mock(
+        return_value=httpx.Response(200, content=buf.getvalue())
+    )
+
+    with pytest.raises(UpstreamGoneError, match=r"SKILL\.md"):
+        download_skill(_URL, tmp_path / "my-skill")
+
+    assert not (tmp_path / "my-skill").exists()
 
 
 @respx.mock

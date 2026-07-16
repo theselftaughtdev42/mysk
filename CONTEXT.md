@@ -76,6 +76,10 @@ _Avoid_: origin, attribution, self-authored, imported (as a provenance value)
 The upstream URL recorded inside a skill's `mysk` frontmatter block. Its presence is what makes a skill refreshable (has an upstream); it identifies where the skill came from, keys duplicate-import detection, and enables Refresh.
 _Avoid_: url, link, reference
 
+**Broken Upstream**:
+A skill whose recorded `source` no longer resolves — the repo or ref is gone, or the skill directory (or its `SKILL.md`) has been renamed or deleted within a live repo. A transient network or rate-limit error is not a broken upstream.
+_Avoid_: dead link, stale source, orphaned skill
+
 **Repo Slug**:
 The compact `owner/repo` identifier of a GitHub repository, e.g. `theselftaughtdev42/mysk`. Accepted as `import` input and shown in `list` as the compact rendering of a skill's Source, hyperlinked to the full URL. Identifies a *repository*. GitHub is assumed — see ADR-0010.
 _Avoid_: slug (bare), handle, shorthand, owner/repo string
