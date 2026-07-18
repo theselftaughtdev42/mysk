@@ -19,6 +19,7 @@ from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
+    report_act,
     resolve_skill_selection,
 )
 
@@ -121,12 +122,10 @@ def undeploy(
         f"undeploying {len(selected_skills)} skill(s) from "
         f"{len(selected_targets)} target(s)"
     )
-    for target in selected_targets:
-        out.product(f"\n{target.name}:", raw=True)
-        for skill_result in selected_skills:
-            target_path = target.path / skill_result.skill.name
-            result = remove_skill(target_path, skill_library_path=library)
-            line = f"  {skill_result.skill.name}: {result.outcome}"
-            if result.reason:
-                line += f" ({result.reason})"
-            out.product(line, raw=True)
+    report_act(
+        selected_targets,
+        selected_skills,
+        act=lambda skill, target: remove_skill(
+            target.path / skill.skill.name, skill_library_path=library
+        ),
+    )

@@ -1,5 +1,5 @@
 from mysk.commands import deploy as deploy_cmd
-from mysk.io.deploy import ReconcileResult
+from mysk.io.deploy import ActResult
 from mysk.io.targets import Target
 from tests.commands._deploy_support import (
     _ACTIVE_SKILL,
@@ -15,7 +15,7 @@ def test_per_target_report_goes_to_stdout(run_deploy):
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="deployed"
         ),
     )
@@ -26,8 +26,8 @@ def test_per_target_report_goes_to_stdout(run_deploy):
 
 def test_summary_printed_per_target_with_outcomes(run_deploy):
     outcomes = {
-        "foo": ReconcileResult(outcome="deployed"),
-        "bar": ReconcileResult(outcome="skipped"),
+        "foo": ActResult(outcome="deployed"),
+        "bar": ActResult(outcome="skipped"),
     }
 
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
@@ -52,7 +52,7 @@ def test_overwrite_flag_passes_overwrite_true_to_reconcile(run_deploy):
 
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
         captured["overwrite"] = overwrite
-        return ReconcileResult(outcome="overwritten")
+        return ActResult(outcome="overwritten")
 
     run_deploy(
         targets=[_CLAUDE_TARGET],
@@ -70,7 +70,7 @@ def test_without_overwrite_flag_passes_overwrite_false_to_reconcile(run_deploy):
 
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
         captured["overwrite"] = overwrite
-        return ReconcileResult(outcome="skipped")
+        return ActResult(outcome="skipped")
 
     run_deploy(
         targets=[_CLAUDE_TARGET],
@@ -84,7 +84,7 @@ def test_without_overwrite_flag_passes_overwrite_false_to_reconcile(run_deploy):
 
 def test_skip_reason_is_printed_alongside_outcome(run_deploy):
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
-        return ReconcileResult(
+        return ActResult(
             outcome="skipped",
             reason="directory already exists — use --overwrite to replace",
         )
@@ -110,7 +110,7 @@ def test_existing_target_dir_is_not_reported_as_created(tmp_path, run_deploy):
         targets=[target],
         skills=[_ACTIVE_SKILL],
         questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="deployed"
         ),
         suppress_ensure_dir=False,
@@ -130,9 +130,7 @@ def test_missing_skills_dir_is_created_and_reported(tmp_path, run_deploy):
         targets=[target],
         skills=[_ACTIVE_SKILL],
         questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
-        reconcile_fn=lambda s, t, o, skill_library_path: ReconcileResult(
-            outcome="deployed"
-        ),
+        reconcile_fn=lambda s, t, o, skill_library_path: ActResult(outcome="deployed"),
         suppress_ensure_dir=False,
     )
 
@@ -195,7 +193,7 @@ def test_overwrite_into_real_directory_with_yes_flag_skips_confirmation(
         targets=[target],
         skills=[skill],
         questionary_stub=QuestionaryStub([skill]),
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="overwritten"
         ),
         extra_args=["--overwrite", "--yes"],
@@ -231,7 +229,7 @@ def test_overwrite_into_symlink_collision_does_not_prompt(
         targets=[target],
         skills=[skill],
         questionary_stub=QuestionaryStub([skill]),
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="overwritten"
         ),
         extra_args=["--overwrite"],
@@ -263,7 +261,7 @@ def test_overwrite_into_real_directory_without_overwrite_flag_does_not_prompt(
         targets=[target],
         skills=[skill],
         questionary_stub=QuestionaryStub([skill]),
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="skipped", reason="directory already exists"
         ),
     )

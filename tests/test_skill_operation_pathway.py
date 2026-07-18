@@ -4,13 +4,17 @@ from types import SimpleNamespace
 import pytest
 
 from mysk.domain import LifecycleState, MyskBlock, Skill
+from mysk.io.deploy import ActResult
 from mysk.io.skills import InstalledSkill
+from mysk.output import Output
 from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     confirm,
+    report_act,
     resolve_skill_selection,
 )
+from tests.conftest import make_target
 
 
 def _installed(
@@ -149,3 +153,83 @@ def test_build_skill_choices_disabled_entry_carries_reason():
     choices = build_skill_choices([bar], relevance=lambda r: "already deployed")
 
     assert choices[0].disabled == "already deployed"
+
+
+def test_report_act_prints_roster_header_and_outcome_line_per_skill(capsys):
+    claude = make_target("claude")
+    foo = _installed("foo")
+
+    report_act([claude], [foo], act=lambda skill, target: ActResult(outcome="removed"))
+
+    out = capsys.readouterr().out
+    assert "claude:" in out
+    assert "  foo: removed" in out
+
+
+def test_report_act_suffixes_the_reason_in_parentheses(capsys):
+    claude = make_target("claude")
+    foo = _installed("foo")
+
+    report_act(
+        [claude],
+        [foo],
+        act=lambda skill, target: ActResult(outcome="skipped", reason="not deployed"),
+    )
+
+    assert "  foo: skipped (not deployed)" in capsys.readouterr().out
+
+
+def test_report_act_separates_each_target_with_a_leading_blank_line(capsys):
+    claude = make_target("claude")
+    cursor = make_target("cursor")
+    foo = _installed("foo")
+
+    report_act(
+        [claude, cursor],
+        [foo],
+        act=lambda skill, target: ActResult(outcome="removed"),
+    )
+
+    assert "\nclaude:" in capsys.readouterr().out
+
+
+def test_report_act_passes_each_skill_and_target_to_the_act():
+    claude = make_target("claude")
+    cursor = make_target("cursor")
+    foo = _installed("foo")
+    bar = _installed("bar")
+    seen = []
+
+    def act(skill, target):
+        seen.append((target.name, skill.skill.name))
+        return ActResult(outcome="removed")
+
+    report_act([claude, cursor], [foo, bar], act=act)
+
+    assert seen == [
+        ("claude", "foo"),
+        ("claude", "bar"),
+        ("cursor", "foo"),
+        ("cursor", "bar"),
+    ]
+
+
+def test_report_act_runs_prepare_target_after_header_before_skill_lines(capsys):
+    claude = make_target("claude")
+    foo = _installed("foo")
+
+    def prepare(target):
+        Output("mysk.test").product("  Created ~/.claude/skills", raw=True)
+
+    report_act(
+        [claude],
+        [foo],
+        act=lambda skill, target: ActResult(outcome="deployed"),
+        prepare_target=prepare,
+    )
+
+    out = capsys.readouterr().out
+    header = out.index("claude:")
+    created = out.index("Created")
+    line = out.index("foo: deployed")
+    assert header < created < line

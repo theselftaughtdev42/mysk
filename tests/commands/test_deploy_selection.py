@@ -1,4 +1,4 @@
-from mysk.io.deploy import ReconcileResult
+from mysk.io.deploy import ActResult
 from tests.commands._deploy_support import (
     _ACTIVE_SKILL,
     _CLAUDE_TARGET,
@@ -26,7 +26,7 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(run_depl
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=stub,
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="deployed"
         ),
         extra_args=["--agents", "claude"],
@@ -46,7 +46,7 @@ def test_no_agents_flag_fans_out_to_all_found_targets_and_prints_roster(run_depl
         targets=targets,
         skills=[_ACTIVE_SKILL],
         questionary_stub=stub,
-        reconcile_fn=lambda s, t, overwrite, skill_library_path: ReconcileResult(
+        reconcile_fn=lambda s, t, overwrite, skill_library_path: ActResult(
             outcome="deployed"
         ),
     )
@@ -93,7 +93,7 @@ def test_bulk_flag_deploys_named_skills_without_showing_skill_prompt(run_deploy)
 
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
         deployed.append(target_path.name)
-        return ReconcileResult(outcome="deployed")
+        return ActResult(outcome="deployed")
 
     result = run_deploy(
         targets=[_CLAUDE_TARGET],
@@ -114,7 +114,7 @@ def test_skill_positional_deploys_named_skill_without_showing_skill_prompt(run_d
 
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
         deployed.append(target_path.name)
-        return ReconcileResult(outcome="deployed")
+        return ActResult(outcome="deployed")
 
     result = run_deploy(
         targets=[_CLAUDE_TARGET],
@@ -137,7 +137,7 @@ def test_all_flag_deploys_every_deployable_skill_without_showing_skill_prompt(
 
     def reconcile(source_dir, target_path, overwrite, skill_library_path):
         deployed.append(target_path.name)
-        return ReconcileResult(outcome="deployed")
+        return ActResult(outcome="deployed")
 
     result = run_deploy(
         targets=[_CLAUDE_TARGET],

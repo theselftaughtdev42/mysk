@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 from mysk.cli import app
 from mysk.commands import undeploy as undeploy_cmd
 from mysk.domain import LifecycleState
-from mysk.io.deploy import RemoveResult
+from mysk.io.deploy import ActResult
 from tests.conftest import QuestionaryStub, make_skill, make_target, patch_skill_sources
 
 runner = CliRunner()
@@ -82,7 +82,7 @@ def test_summary_printed_per_target_with_outcomes(monkeypatch):
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
     )
 
     assert result.exit_code == 0
@@ -99,7 +99,7 @@ def test_agents_flag_targets_named_agents_without_showing_target_prompt(monkeypa
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=stub,
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
         extra_args=["--agents", "claude"],
     )
 
@@ -118,7 +118,7 @@ def test_no_agents_flag_fans_out_to_all_found_targets_and_prints_roster(monkeypa
         targets=targets,
         skills=[_ACTIVE_SKILL],
         questionary_stub=stub,
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
     )
 
     assert result.exit_code == 0
@@ -167,7 +167,7 @@ def test_skill_positional_removes_named_skill_without_showing_skill_prompt(
 
     def remove(target_path, skill_library_path):
         removed.append(target_path.name)
-        return RemoveResult(outcome="removed")
+        return ActResult(outcome="removed")
 
     result = _run(
         monkeypatch,
@@ -189,7 +189,7 @@ def test_bulk_flag_removes_named_skills_without_showing_skill_prompt(monkeypatch
 
     def remove(target_path, skill_library_path):
         removed.append(target_path.name)
-        return RemoveResult(outcome="removed")
+        return ActResult(outcome="removed")
 
     result = _run(
         monkeypatch,
@@ -213,7 +213,7 @@ def test_all_flag_removes_every_deployable_skill_without_showing_skill_prompt(
 
     def remove(target_path, skill_library_path):
         removed.append(target_path.name)
-        return RemoveResult(outcome="removed")
+        return ActResult(outcome="removed")
 
     result = _run(
         monkeypatch,
@@ -270,7 +270,7 @@ def test_per_target_report_goes_to_stdout(monkeypatch):
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
     )
 
     assert "claude" in result.stdout
@@ -308,7 +308,7 @@ def test_skip_reason_is_printed_alongside_outcome(monkeypatch):
         targets=[_CLAUDE_TARGET],
         skills=[_ACTIVE_SKILL],
         questionary_stub=QuestionaryStub([_ACTIVE_SKILL]),
-        remove_fn=lambda t, skill_library_path: RemoveResult(
+        remove_fn=lambda t, skill_library_path: ActResult(
             outcome="skipped", reason="not deployed"
         ),
     )
