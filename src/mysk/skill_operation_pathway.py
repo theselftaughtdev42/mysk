@@ -1,10 +1,15 @@
-"""Shared Skill Operation Pathway: selection, confirmation, and picker construction."""
+"""Shared Skill Operation Pathway: selection, confirmation, and reporting."""
 
 from collections.abc import Callable, Sequence
 
 import questionary
 
+from mysk.io.deploy import ActResult
 from mysk.io.skills import InstalledSkill
+from mysk.io.targets import Target
+from mysk.output import Output
+
+out = Output(__name__)
 
 
 class SkillSelectionError(Exception):
@@ -77,3 +82,30 @@ def build_skill_choices(
         )
         for r in eligible
     ]
+
+
+def report_act(
+    targets: Sequence[Target],
+    skills: Sequence[InstalledSkill],
+    *,
+    act: Callable[[InstalledSkill, Target], ActResult],
+    prepare_target: Callable[[Target], None] = lambda _: None,
+) -> None:
+    """Run *act* over every skill at every target, reporting each outcome.
+
+    The final stage of the Skill Operation Pathway, shared by `deploy`,
+    `undeploy`, and `cleanup`. For each target in *targets*, print the
+    blank-line-separated `name:` roster header, call *prepare_target* (a no-op by
+    default; `deploy` uses it to create and announce a missing target directory),
+    then run *act* on each skill and print its outcome line, suffixing the
+    reason in parentheses when one is present.
+    """
+    for target in targets:
+        out.product(f"\n{target.name}:", raw=True)
+        prepare_target(target)
+        for skill in skills:
+            result = act(skill, target)
+            line = f"  {skill.skill.name}: {result.outcome}"
+            if result.reason:
+                line += f" ({result.reason})"
+            out.product(line, raw=True)

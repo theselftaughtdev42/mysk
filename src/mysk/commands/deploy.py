@@ -6,7 +6,7 @@ from pathlib import Path
 import questionary
 import typer
 
-from mysk.io.deploy import reconcile_skill
+from mysk.io.deploy import ActResult, reconcile_skill
 from mysk.io.skills import InstalledSkill, load_skills, skill_library
 from mysk.io.targets import (
     Target,
@@ -19,6 +19,7 @@ from mysk.skill_operation_pathway import (
     SkillSelectionError,
     build_skill_choices,
     confirm,
+    report_act,
     resolve_skill_selection,
 )
 
@@ -141,33 +142,33 @@ def deploy(
         f"deploying {len(selected_skills)} skill(s) to "
         f"{len(selected_targets)} target(s)"
     )
-    for target in selected_targets:
-        out.product(f"\n{target.name}:", raw=True)
+
+    def _announce_new_dir(target: Target) -> None:
         created = _ensure_target_dir(target.path)
         if created:
             out.product(f"  Created {created}", raw=True)
-        for skill_result in selected_skills:
-            target_path = target.path / skill_result.skill.name
-            destroys_real_dir = (
-                overwrite and target_path.exists() and not target_path.is_symlink()
+
+    def _deploy_one(skill_result: InstalledSkill, target: Target) -> ActResult:
+        target_path = target.path / skill_result.skill.name
+        destroys_real_dir = (
+            overwrite and target_path.exists() and not target_path.is_symlink()
+        )
+        if destroys_real_dir:
+            message = (
+                f"'{target_path}' is a real directory, not a mysk symlink. Replace it?"
             )
-            if destroys_real_dir:
-                message = (
-                    f"'{target_path}' is a real directory, not a mysk symlink. "
-                    "Replace it?"
-                )
-                if not confirm(message, yes=yes):
-                    out.product(
-                        f"  {skill_result.skill.name}: skipped (declined)", raw=True
-                    )
-                    continue
-            result = reconcile_skill(
-                skill_result.dir,
-                target_path,
-                overwrite=overwrite,
-                skill_library_path=library,
-            )
-            line = f"  {skill_result.skill.name}: {result.outcome}"
-            if result.reason:
-                line += f" ({result.reason})"
-            out.product(line, raw=True)
+            if not confirm(message, yes=yes):
+                return ActResult(outcome="skipped", reason="declined")
+        return reconcile_skill(
+            skill_result.dir,
+            target_path,
+            overwrite=overwrite,
+            skill_library_path=library,
+        )
+
+    report_act(
+        selected_targets,
+        selected_skills,
+        act=_deploy_one,
+        prepare_target=_announce_new_dir,
+    )

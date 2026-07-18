@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 from mysk.cli import app
 from mysk.commands import cleanup as cleanup_cmd
 from mysk.domain import LifecycleState
-from mysk.io.deploy import RemoveResult
+from mysk.io.deploy import ActResult
 from tests.conftest import QuestionaryStub, make_skill, make_target, patch_skill_sources
 
 runner = CliRunner()
@@ -55,7 +55,7 @@ def test_no_args_picker_shows_all_deprecated_skills_selectable(monkeypatch):
         skills=[_DEPRECATED_SKILL, _DEPRECATED_SKILL_2],
         questionary_stub=stub,
         remove_fn=lambda t, skill_library_path: (
-            removed.append(t.name) or RemoveResult(outcome="removed")
+            removed.append(t.name) or ActResult(outcome="removed")
         ),
     )
 
@@ -84,7 +84,7 @@ def test_all_flag_user_declines_confirmation_exits_without_removing(monkeypatch)
         skills=[_DEPRECATED_SKILL],
         confirm_fn=lambda msg, *, yes: False,
         remove_fn=lambda t, skill_library_path: (
-            removed.append(t) or RemoveResult(outcome="removed")
+            removed.append(t) or ActResult(outcome="removed")
         ),
         extra_args=["--all"],
     )
@@ -100,7 +100,7 @@ def test_all_flag_confirmed_removal_shows_removed_grouped_by_target(
         monkeypatch,
         targets=[_CLAUDE_TARGET, _CURSOR_TARGET],
         skills=[_DEPRECATED_SKILL],
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
         extra_args=["--all"],
     )
 
@@ -115,7 +115,7 @@ def test_all_flag_deprecated_skill_not_deployed_shows_skipped(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_DEPRECATED_SKILL],
-        remove_fn=lambda t, skill_library_path: RemoveResult(
+        remove_fn=lambda t, skill_library_path: ActResult(
             outcome="skipped", reason="not deployed"
         ),
         extra_args=["--all"],
@@ -136,7 +136,7 @@ def test_bulk_flag_removes_only_named_skills_without_showing_picker(monkeypatch)
         skills=[_DEPRECATED_SKILL, _DEPRECATED_SKILL_2],
         questionary_stub=stub,
         remove_fn=lambda t, skill_library_path: (
-            removed.append(t.name) or RemoveResult(outcome="removed")
+            removed.append(t.name) or ActResult(outcome="removed")
         ),
         extra_args=["--bulk", "baz"],
     )
@@ -153,7 +153,7 @@ def test_yes_flag_skips_confirmation(monkeypatch):
         targets=[_CLAUDE_TARGET],
         skills=[_DEPRECATED_SKILL],
         confirm_fn=lambda msg, *, yes: confirm_calls.append(yes) or True,
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
         extra_args=["--all", "--yes"],
     )
 
@@ -190,7 +190,7 @@ def test_per_target_report_goes_to_stdout(monkeypatch):
         monkeypatch,
         targets=[_CLAUDE_TARGET],
         skills=[_DEPRECATED_SKILL],
-        remove_fn=lambda t, skill_library_path: RemoveResult(outcome="removed"),
+        remove_fn=lambda t, skill_library_path: ActResult(outcome="removed"),
         extra_args=["--all"],
     )
 
